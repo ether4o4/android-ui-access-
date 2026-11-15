@@ -1,0 +1,55 @@
+# AutoNoBot Configuration
+# Copy to ~/.autonobot/config.yaml
+
+llm:
+  provider: "ollama"
+  base_url: "http://127.0.0.1:11434"
+  model: "qwen2.5-coder:3b"
+  temperature: 0.3          # Low temp = more precise JSON output
+  top_p: 0.9
+  num_predict: 2048
+  stop: ["<|im_end|>"]     # Qwen ChatML stop token
+
+safety:
+  enabled: true
+  dangerous_operations:
+    - delete
+    - financial
+    - cryptocurrency
+    - system_config
+    - root_access
+    - account_delete
+    - mass_communication
+  safe_operations:
+    - open_app
+    - type_text
+    - take_photo
+    - read_file
+    - send_email
+    - send_sms
+    - send_notification
+    - get_device_info
+    - battery_status
+    - wifi_info
+    - get_location
+    - list_apps
+    - write_file
+    - list_files
+    - get_clipboard
+    - set_clipboard
+    - vibrate
+    - torch
+    - http_get
+    - http_post
+
+execution:
+  mode: "autonomous"
+  verbose: true
+
+logging:
+  level: "INFO"
+  file: "~/.autonobot/logs/agent.log"
+
+skills:
+  auto_load: true
+  directory: "~/.autonobot/skills"

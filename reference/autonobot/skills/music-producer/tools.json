@@ -1,0 +1,377 @@
+{
+  "tools": [
+    {
+      "name": "generate_music",
+      "category": "music_generation",
+      "description": "Generate original music from a text prompt. Supports beats, instrumentals, full compositions.",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "Music description (e.g., 'lo-fi hip hop beat with jazz samples', 'upbeat electronic dance track')"
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 3,
+            "maximum": 600,
+            "description": "Duration in seconds (3-600, default: auto)"
+          },
+          "genre": {
+            "type": "string",
+            "enum": ["lo-fi", "trap", "house", "ambient", "electronic", "jazz", "rock", "pop", "funk", "reggae", "classical"],
+            "description": "Optional: specify genre"
+          },
+          "tempo": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 200,
+            "description": "Optional: BPM (beats per minute)"
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Path to save output MP3"
+          }
+        },
+        "required": ["prompt", "output_path"]
+      }
+    },
+    {
+      "name": "clone_voice",
+      "category": "voice_synthesis",
+      "description": "Clone your voice from 1-3 audio samples. Returns voice ID for use in other tools.",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "voice_name": {
+            "type": "string",
+            "description": "Name for your cloned voice (e.g., 'my_voice', 'podcast_me')"
+          },
+          "sample_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 3,
+            "description": "Paths to audio samples (1-3 files, 30sec-2min each)"
+          }
+        },
+        "required": ["voice_name", "sample_paths"]
+      }
+    },
+    {
+      "name": "text_to_speech",
+      "category": "voice_synthesis",
+      "description": "Generate speech audio from text using cloned or standard voices.",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to convert to speech"
+          },
+          "voice_id": {
+            "type": "string",
+            "description": "Voice ID (cloned or standard: rachel, sarah, lily, george, charlie, chris)"
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Path to save output MP3"
+          }
+        },
+        "required": ["text", "output_path"]
+      }
+    },
+    {
+      "name": "generate_sound_effects",
+      "category": "sound_design",
+      "description": "Generate realistic sound effects from text descriptions.",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Sound effect description (e.g., 'cinematic whoosh', 'gentle rain')"
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "description": "Duration in seconds (1-30)"
+          },
+          "loopable": {
+            "type": "boolean",
+            "description": "Make the effect seamlessly loopable"
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Path to save output MP3"
+          }
+        },
+        "required": ["description", "output_path"]
+      }
+    },
+    {
+      "name": "edit_vocals",
+      "category": "audio_editing",
+      "description": "Edit and process vocal tracks with advanced effects.",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "input_path": {
+            "type": "string",
+            "description": "Path to vocal audio file"
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["normalize", "noise_gate", "fade_in", "fade_out", "speed", "pitch", "voice_effect"],
+                  "description": "Operation type"
+                },
+                "value": {
+                  "type": "number",
+                  "description": "Operation value (speed/pitch multiplier, fade duration, gate threshold)"
+                },
+                "effect": {
+                  "type": "string",
+                  "enum": ["dark_demon", "ethereal", "robotic", "clear", "raspy", "hollow"],
+                  "description": "Voice effect preset (for voice_effect type)"
+                }
+              }
+            },
+            "description": "List of editing operations"
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Path to save edited audio"
+          }
+        },
+        "required": ["input_path", "output_path"]
+      }
+    },
+    {
+      "name": "apply_voice_effect",
+      "category": "audio_editing",
+      "description": "Apply advanced voice character effects: dark demon, ethereal, robotic, clear, raspy, hollow.",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "input_path": {
+            "type": "string",
+            "description": "Path to vocal audio file"
+          },
+          "effect": {
+            "type": "string",
+            "enum": ["dark_demon", "ethereal", "robotic", "clear", "raspy", "hollow"],
+            "description": "Voice effect preset"
+          },
+          "intensity": {
+            "type": "string",
+            "enum": ["light", "medium", "heavy"],
+            "description": "Effect intensity"
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Path to save output"
+          }
+        },
+        "required": ["input_path", "effect", "output_path"]
+      }
+    },
+    {
+      "name": "create_beat",
+      "category": "beat_creation",
+      "description": "Generate drum beats and patterns.",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "genre": {
+            "type": "string",
+            "enum": ["trap", "lo-fi", "house", "hip-hop", "funk", "rock"],
+            "description": "Beat genre"
+          },
+          "bpm": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 200,
+            "description": "Tempo in BPM"
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 4,
+            "maximum": 120,
+            "description": "Duration in seconds"
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Path to save beat"
+          }
+        },
+        "required": ["genre", "bpm", "output_path"]
+      }
+    },
+    {
+      "name": "dub_audio",
+      "category": "localization",
+      "description": "Dub audio or video into another language while preserving emotion and tone.",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "input_path": {
+            "type": "string",
+            "description": "Path to audio or video file"
+          },
+          "target_language": {
+            "type": "string",
+            "enum": ["es", "fr", "de", "it", "pt", "ru", "ja", "zh", "hi", "ko"],
+            "description": "Target language code"
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Path to save dubbed audio/video"
+          }
+        },
+        "required": ["input_path", "target_language", "output_path"]
+      }
+    },
+    {
+      "name": "process_audio",
+      "category": "audio_editing",
+      "description": "Apply effects and processing to audio: EQ, compression, reverb, delay, etc.",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "input_path": {
+            "type": "string",
+            "description": "Path to audio file"
+          },
+          "effects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "effect": {
+                  "type": "string",
+                  "enum": ["reverb", "delay", "compression", "eq", "distortion", "chorus", "limiter"],
+                  "description": "Effect type"
+                },
+                "intensity": {
+                  "type": "string",
+                  "enum": ["light", "medium", "heavy"],
+                  "description": "Effect intensity"
+                }
+              }
+            },
+            "description": "List of effects to apply"
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Path to save processed audio"
+          }
+        },
+        "required": ["input_path", "output_path"]
+      }
+    },
+    {
+      "name": "mix_tracks",
+      "category": "mixing",
+      "description": "Combine multiple audio tracks with volume balancing and mixing.",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "tracks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Path to audio file"
+                },
+                "volume_db": {
+                  "type": "number",
+                  "description": "Volume adjustment in dB (-20 to +20)"
+                }
+              }
+            },
+            "minItems": 2,
+            "description": "Audio tracks to mix"
+          },
+          "normalize": {
+            "type": "boolean",
+            "description": "Auto-normalize output levels"
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Path to save mixed audio"
+          }
+        },
+        "required": ["tracks", "output_path"]
+      }
+    },
+    {
+      "name": "extract_vocals",
+      "category": "audio_editing",
+      "description": "Isolate vocals from a mixed track (vocal separation).",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "input_path": {
+            "type": "string",
+            "description": "Path to audio file with vocals"
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Path to save extracted vocals"
+          }
+        },
+        "required": ["input_path", "output_path"]
+      }
+    },
+    {
+      "name": "apply_effects",
+      "category": "audio_editing",
+      "description": "Apply specific audio effects: reverb, delay, chorus, distortion, etc.",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "input_path": {
+            "type": "string",
+            "description": "Path to audio file"
+          },
+          "effect": {
+            "type": "string",
+            "enum": ["reverb", "delay", "chorus", "distortion", "compression", "eq", "pitch_shift", "time_stretch"],
+            "description": "Effect to apply"
+          },
+          "parameters": {
+            "type": "object",
+            "description": "Effect-specific parameters (varies by effect)"
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Path to save output"
+          }
+        },
+        "required": ["input_path", "effect", "output_path"]
+      }
+    }
+  ]
+}
