@@ -16,6 +16,8 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.ether4o4.odcm.agent.AgentService
+import com.ether4o4.odcm.agent.TaskLog
+import com.ether4o4.odcm.control.ControlService
 import com.ether4o4.odcm.core.AutonomyLevel
 import com.ether4o4.odcm.data.SecretStore
 import com.ether4o4.odcm.data.Settings
@@ -25,11 +27,15 @@ class MainActivity : Activity() {
 
     private lateinit var settings: Settings
     private lateinit var secrets: SecretStore
+    private lateinit var statusView: TextView
+    private lateinit var logView: TextView
+    private var keySaved = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         settings = Settings(this)
         secrets = SecretStore(this)
+        keySaved = secrets.has(SecretStore.ANTHROPIC_KEY)
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; val p = dp(16); setPadding(p, p, p, p) }
         val scroll = ScrollView(this).apply { addView(root) }
@@ -37,12 +43,17 @@ class MainActivity : Activity() {
 
         root.addView(header("ODCM"))
 
+        statusView = TextView(this).apply { textSize = 13f; setPadding(0, 0, 0, dp(8)) }
+        root.addView(statusView)
+
         root.addView(label("Claude API key"))
         val keyField = edit(if (secrets.has(SecretStore.ANTHROPIC_KEY)) "••••••••" else "", password = true)
         root.addView(keyField)
         root.addView(button("Save key") {
             val v = keyField.text.toString()
-            if (v.isNotBlank() && v != "••••••••") { secrets.put(SecretStore.ANTHROPIC_KEY, v.trim()); toast("Key saved") }
+            if (v.isNotBlank() && v != "••••••••") {
+                secrets.put(SecretStore.ANTHROPIC_KEY, v.trim()); keySaved = true; toast("Key saved"); refreshStatus()
+            }
         })
 
         root.addView(label("Model"))
@@ -99,13 +110,38 @@ class MainActivity : Activity() {
         root.addView(button("Run") {
             val task = taskField.text.toString().trim()
             if (task.isEmpty()) { toast("Type a task first"); return@button }
+            if (ControlService.get() == null) { toast("Enable Accessibility for ODCM first"); refreshStatus(); return@button }
+            if (!keySaved) { toast("Save your Claude API key first"); return@button }
             settings.model = modelField.text.toString()
             settings.autonomy = levels[levelIndex]
             settings.rules = rulesField.text.toString()
             settings.blockedPackages = blockedField.text.toString()
             AgentService.start(this, task, replyKey = null)
-            moveTaskToBack(true)
+            toast("Running — watch the log below, or the overlay on other screens")
         })
+
+        root.addView(divider())
+        root.addView(label("Live log"))
+        logView = TextView(this).apply { textSize = 12f; typeface = android.graphics.Typeface.MONOSPACE }
+        root.addView(logView)
+        root.addView(button("Clear log") { TaskLog.clear() })
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshStatus()
+        TaskLog.setListener { lines -> logView.text = lines.takeLast(40).joinToString("\n").ifEmpty { "(no activity yet)" } }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        TaskLog.setListener(null)
+    }
+
+    private fun refreshStatus() {
+        val acc = if (ControlService.get() != null) "ON" else "OFF — enable in Accessibility settings"
+        val key = if (keySaved) "set" else "missing"
+        statusView.text = "Accessibility: $acc\nAPI key: $key"
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()

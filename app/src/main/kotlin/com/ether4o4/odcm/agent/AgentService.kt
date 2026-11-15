@@ -47,9 +47,11 @@ class AgentService : Service(), Overlay.Listener {
     }
 
     private fun startTask(task: String, replyTarget: String?) {
-        if (job?.isActive == true) return
+        if (job?.isActive == true) { TaskLog.add("Busy with another task; ignored: $task"); return }
+        TaskLog.add("Task: $task")
         val control = ControlService.get()
         if (control == null) {
+            TaskLog.add("Can't start: accessibility service is OFF. Enable ODCM in Accessibility settings.")
             notify("Enable ODCM's accessibility service first.")
             finish()
             return
@@ -57,10 +59,12 @@ class AgentService : Service(), Overlay.Listener {
         val settings = Settings(this)
         val apiKey = SecretStore(this).get(SecretStore.ANTHROPIC_KEY)
         if (apiKey.isEmpty()) {
+            TaskLog.add("Can't start: no Claude API key saved. Add it and tap Save key.")
             notify("Add your Claude API key in ODCM first.")
             finish()
             return
         }
+        TaskLog.add("Model ${settings.model}, autonomy ${settings.autonomy.name.lowercase()}. Working…")
 
         val overlay = control.overlay
         overlay.listener = this
@@ -84,8 +88,8 @@ class AgentService : Service(), Overlay.Listener {
             policy = policy,
             guide = GuideStore(guideRoot),
             callbacks = object : TaskRunner.Callbacks {
-                override fun status(text: String) { overlay.status(text); notify(text) }
-                override fun reply(text: String) { replySink?.invoke(text) }
+                override fun status(text: String) { overlay.status(text); notify(text); TaskLog.add(text) }
+                override fun reply(text: String) { TaskLog.add("Reply: $text"); replySink?.invoke(text) }
                 override suspend fun requestApproval(reason: String): Boolean {
                     val d = CompletableDeferred<Boolean>()
                     pendingApproval = d
@@ -98,7 +102,8 @@ class AgentService : Service(), Overlay.Listener {
         )
         runner = r
         job = scope.launch {
-            runCatching { r.run(task) }
+            runCatching { r.run(task) }.onFailure { TaskLog.add("Error: ${it.message ?: it.javaClass.simpleName}") }
+            TaskLog.add("Task ended.")
             finish()
         }
     }
