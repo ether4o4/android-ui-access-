@@ -11,31 +11,41 @@ object TaskLog {
     private const val CAP = 200
     private val lines = ArrayDeque<String>()
     private val main = Handler(Looper.getMainLooper())
-    @Volatile private var listener: ((List<String>) -> Unit)? = null
+    private val listeners = ArrayList<(List<String>) -> Unit>()
 
     @Synchronized
     fun add(line: String) {
         val stamped = "${time()}  $line"
         lines.addLast(stamped)
         while (lines.size > CAP) lines.removeFirst()
-        val snap = lines.toList()
-        val l = listener
-        if (l != null) main.post { l(snap) }
+        notifyAll(lines.toList())
     }
 
     @Synchronized
     fun snapshot(): List<String> = lines.toList()
 
     @Synchronized
+    fun latest(): String = lines.lastOrNull() ?: ""
+
+    @Synchronized
     fun clear() {
         lines.clear()
-        val l = listener
-        if (l != null) main.post { l(emptyList()) }
+        notifyAll(emptyList())
     }
 
-    fun setListener(l: ((List<String>) -> Unit)?) {
-        listener = l
-        if (l != null) { val snap = snapshot(); main.post { l(snap) } }
+    @Synchronized
+    fun addListener(l: (List<String>) -> Unit) {
+        listeners.add(l)
+        val snap = lines.toList()
+        main.post { l(snap) }
+    }
+
+    @Synchronized
+    fun removeListener(l: (List<String>) -> Unit) { listeners.remove(l) }
+
+    private fun notifyAll(snap: List<String>) {
+        val copy = listeners.toList()
+        main.post { copy.forEach { it(snap) } }
     }
 
     private fun time(): String {

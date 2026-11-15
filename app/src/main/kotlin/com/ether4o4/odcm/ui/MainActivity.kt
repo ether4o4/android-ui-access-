@@ -15,7 +15,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.net.Uri
 import com.ether4o4.odcm.agent.AgentService
+import com.ether4o4.odcm.agent.CompanionService
 import com.ether4o4.odcm.agent.TaskLog
 import com.ether4o4.odcm.control.ControlService
 import com.ether4o4.odcm.core.AutonomyLevel
@@ -104,6 +106,20 @@ class MainActivity : Activity() {
         root.addView(hint("Enable ODCM in both, plus allow restricted settings if Android asks."))
 
         root.addView(divider())
+        root.addView(label("Companion overlay"))
+        root.addView(button("Show companion") {
+            if (!CompanionService.canDrawOverlays(this)) {
+                toast("Allow 'display over other apps' for ODCM, then tap again")
+                startActivity(Intent(AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            } else {
+                CompanionService.start(this)
+                toast("Companion shown — drag it, tap ⤢/—/✕ to resize or close")
+            }
+        })
+        root.addView(button("Hide companion") { CompanionService.stop(this) })
+        root.addView(hint("The floating face shows what ODCM is doing. Drag to move; ⤢ full, — bubble, ✕ close."))
+
+        root.addView(divider())
         root.addView(label("Try a task"))
         val taskField = edit("", lines = 2)
         root.addView(taskField)
@@ -127,15 +143,19 @@ class MainActivity : Activity() {
         root.addView(button("Clear log") { TaskLog.clear() })
     }
 
+    private val logListener: (List<String>) -> Unit = { lines ->
+        logView.text = lines.takeLast(40).joinToString("\n").ifEmpty { "(no activity yet)" }
+    }
+
     override fun onResume() {
         super.onResume()
         refreshStatus()
-        TaskLog.setListener { lines -> logView.text = lines.takeLast(40).joinToString("\n").ifEmpty { "(no activity yet)" } }
+        TaskLog.addListener(logListener)
     }
 
     override fun onPause() {
         super.onPause()
-        TaskLog.setListener(null)
+        TaskLog.removeListener(logListener)
     }
 
     private fun refreshStatus() {

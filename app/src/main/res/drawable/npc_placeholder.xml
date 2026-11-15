@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder companion face. A still vector for now; swapped for real art/animation later. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <path
+        android:fillColor="#10203A"
+        android:pathData="M50,50m-48,0a48,48 0,1 1,96 0a48,48 0,1 1,-96 0" />
+    <path
+        android:fillColor="#1C3A66"
+        android:pathData="M50,50m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0" />
+    <!-- eyes -->
+    <path
+        android:fillColor="#7FE0FF"
+        android:pathData="M36,44m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+    <path
+        android:fillColor="#7FE0FF"
+        android:pathData="M64,44m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+    <!-- pupils -->
+    <path
+        android:fillColor="#0A1424"
+        android:pathData="M36,45m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+    <path
+        android:fillColor="#0A1424"
+        android:pathData="M64,45m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+    <!-- mouth -->
+    <path
+        android:strokeColor="#7FE0FF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M38,66 Q50,74 62,66" />
+</vector>
