@@ -1,0 +1,141 @@
+package com.ether4o4.odcm.ui
+
+import android.app.Activity
+import android.content.Intent
+import android.os.Bundle
+import android.provider.Settings as AndroidSettings
+import android.text.InputType
+import android.view.View
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.widget.Button
+import android.widget.CheckBox
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import com.ether4o4.odcm.agent.AgentService
+import com.ether4o4.odcm.core.AutonomyLevel
+import com.ether4o4.odcm.data.SecretStore
+import com.ether4o4.odcm.data.Settings
+
+/** One scrolling screen: keys, settings, and a box to type a task. Plain Views, no UI framework. */
+class MainActivity : Activity() {
+
+    private lateinit var settings: Settings
+    private lateinit var secrets: SecretStore
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        settings = Settings(this)
+        secrets = SecretStore(this)
+
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; val p = dp(16); setPadding(p, p, p, p) }
+        val scroll = ScrollView(this).apply { addView(root) }
+        setContentView(scroll)
+
+        root.addView(header("ODCM"))
+
+        root.addView(label("Claude API key"))
+        val keyField = edit(if (secrets.has(SecretStore.ANTHROPIC_KEY)) "••••••••" else "", password = true)
+        root.addView(keyField)
+        root.addView(button("Save key") {
+            val v = keyField.text.toString()
+            if (v.isNotBlank() && v != "••••••••") { secrets.put(SecretStore.ANTHROPIC_KEY, v.trim()); toast("Key saved") }
+        })
+
+        root.addView(label("Model"))
+        val modelField = edit(settings.model)
+        root.addView(modelField)
+
+        root.addView(label("Autonomy"))
+        val autonomy = TextView(this)
+        val levels = AutonomyLevel.entries
+        var levelIndex = levels.indexOf(settings.autonomy).coerceAtLeast(0)
+        fun showLevel() { autonomy.text = "Level: ${levels[levelIndex].name.lowercase()}" }
+        showLevel()
+        root.addView(autonomy)
+        root.addView(button("Change autonomy") { levelIndex = (levelIndex + 1) % levels.size; showLevel() })
+
+        root.addView(label("Rules (plain English, one per line)"))
+        val rulesField = edit(settings.rules, lines = 3)
+        root.addView(rulesField)
+
+        root.addView(label("Blocked apps (package names, comma-separated)"))
+        val blockedField = edit(settings.blockedPackages, lines = 2)
+        root.addView(blockedField)
+
+        root.addView(label("Telegram chat name to listen to (blank = off)"))
+        val chatField = edit(settings.inboxChat)
+        root.addView(chatField)
+        root.addView(label("Passphrase to require (blank = none)"))
+        val phraseField = edit(settings.inboxPassphrase)
+        root.addView(phraseField)
+
+        root.addView(button("Save settings") {
+            settings.model = modelField.text.toString()
+            settings.autonomy = levels[levelIndex]
+            settings.rules = rulesField.text.toString()
+            settings.blockedPackages = blockedField.text.toString()
+            settings.inboxChat = chatField.text.toString()
+            settings.inboxPassphrase = phraseField.text.toString()
+            toast("Saved")
+        })
+
+        root.addView(divider())
+        root.addView(button("Open Accessibility settings") {
+            startActivity(Intent(AndroidSettings.ACTION_ACCESSIBILITY_SETTINGS))
+        })
+        root.addView(button("Open Notification access settings") {
+            startActivity(Intent(AndroidSettings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        })
+        root.addView(hint("Enable ODCM in both, plus allow restricted settings if Android asks."))
+
+        root.addView(divider())
+        root.addView(label("Try a task"))
+        val taskField = edit("", lines = 2)
+        root.addView(taskField)
+        root.addView(button("Run") {
+            val task = taskField.text.toString().trim()
+            if (task.isEmpty()) { toast("Type a task first"); return@button }
+            settings.model = modelField.text.toString()
+            settings.autonomy = levels[levelIndex]
+            settings.rules = rulesField.text.toString()
+            settings.blockedPackages = blockedField.text.toString()
+            AgentService.start(this, task, replyKey = null)
+            moveTaskToBack(true)
+        })
+    }
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
+
+    private fun header(s: String) = TextView(this).apply { text = s; textSize = 24f; setPadding(0, 0, 0, dp(12)) }
+    private fun label(s: String) = TextView(this).apply { text = s; textSize = 13f; setPadding(0, dp(12), 0, dp(4)) }
+    private fun hint(s: String) = TextView(this).apply { text = s; textSize = 12f; alpha = 0.7f; setPadding(0, dp(4), 0, 0) }
+    private fun divider() = View(this).apply {
+        layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, dp(1)).also { it.topMargin = dp(16); it.bottomMargin = dp(4) }
+        setBackgroundColor(0x33888888)
+    }
+
+    private fun edit(value: String, password: Boolean = false, lines: Int = 1) = EditText(this).apply {
+        setText(value)
+        layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+        inputType = when {
+            password -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            lines > 1 -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            else -> InputType.TYPE_CLASS_TEXT
+        }
+        if (lines > 1) { minLines = lines; maxLines = lines + 2 }
+    }
+
+    private fun button(text: String, onClick: () -> Unit) = Button(this).apply {
+        this.text = text
+        isAllCaps = false
+        layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also { it.topMargin = dp(8) }
+        setOnClickListener { onClick() }
+    }
+
+    @Suppress("unused") private fun unusedCheckbox() = CheckBox(this)
+}
