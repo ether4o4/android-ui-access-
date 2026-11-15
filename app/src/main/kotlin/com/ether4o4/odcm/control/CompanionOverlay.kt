@@ -2,8 +2,12 @@ package com.ether4o4.odcm.control
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.ImageDecoder
 import android.graphics.PixelFormat
+import android.graphics.drawable.AnimatedImageDrawable
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Build
 import android.view.Gravity
 import android.view.MotionEvent
@@ -11,9 +15,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.ether4o4.odcm.data.Settings
 import kotlin.math.abs
 
 /**
@@ -32,10 +38,41 @@ class CompanionOverlay(private val context: Context) {
     private var posX = 40
     private var posY = 160
     private val avatar = AvatarView(context)
+    private var customImage: Drawable? = loadCustomImage()
     var onClose: (() -> Unit)? = null
 
-    /** Reflect an agent state word on the face (thinking, speaking, idle, error…). */
-    fun setState(state: String) = avatar.post { avatar.setState(state) }
+    /** Reflect an agent state word on the drawn face (ignored when a custom image is set). */
+    fun setState(state: String) {
+        if (customImage == null) avatar.post { avatar.setState(state) }
+    }
+
+    /** Re-reads the chosen image after the user picks a new one, and redraws. */
+    fun reloadAvatar() {
+        customImage = loadCustomImage()
+        render()
+    }
+
+    private fun loadCustomImage(): Drawable? {
+        val uri = Settings(context).avatarUri.ifBlank { return null }
+        return runCatching {
+            val source = ImageDecoder.createSource(context.contentResolver, Uri.parse(uri))
+            ImageDecoder.decodeDrawable(source)
+        }.getOrNull()
+    }
+
+    private fun faceView(sizePx: Int): View {
+        val img = customImage
+        return if (img != null) {
+            ImageView(context).apply {
+                setImageDrawable(img)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                layoutParams = LinearLayout.LayoutParams(sizePx, sizePx)
+                (img as? AnimatedImageDrawable)?.start()
+            }
+        } else {
+            detachedAvatar().apply { layoutParams = LinearLayout.LayoutParams(sizePx, sizePx) }
+        }
+    }
 
     private val density = context.resources.displayMetrics.density
     private fun dp(v: Int) = (v * density).toInt()
@@ -83,9 +120,10 @@ class CompanionOverlay(private val context: Context) {
 
     private fun buildBubble(): View {
         val holder = LinearLayout(context).apply {
+            gravity = Gravity.CENTER
             background = circle(Color.argb(235, 12, 20, 36))
             tag = intArrayOf(dp(64), dp(64))
-            addView(detachedAvatar(), LinearLayout.LayoutParams(dp(60), dp(60)))
+            addView(faceView(dp(58)))
         }
         attachDrag(holder) { toggleTo(Mode.BOX) }
         return holder
@@ -107,9 +145,7 @@ class CompanionOverlay(private val context: Context) {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val face = detachedAvatar().apply {
-            layoutParams = LinearLayout.LayoutParams(dp(if (big) 84 else 48), dp(if (big) 84 else 48))
-        }
+        val face = faceView(dp(if (big) 84 else 48))
         val title = TextView(context).apply {
             text = "ODCM"
             setTextColor(Color.WHITE)

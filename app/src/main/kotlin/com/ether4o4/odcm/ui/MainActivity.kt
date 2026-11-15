@@ -117,7 +117,14 @@ class MainActivity : Activity() {
             }
         })
         root.addView(button("Hide companion") { CompanionService.stop(this) })
-        root.addView(hint("The floating face shows what ODCM is doing. Drag to move; ⤢ full, — bubble, ✕ close."))
+        root.addView(button("Choose companion image") {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("image/*")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            startActivityForResult(intent, REQ_PICK_IMAGE)
+        })
+        root.addView(hint("Pick any image (PNG/JPG, or an animated GIF/WebP) for the face. Drag to move; ⤢ full, — bubble, ✕ close."))
 
         root.addView(divider())
         root.addView(label("Try a task"))
@@ -158,6 +165,20 @@ class MainActivity : Activity() {
         TaskLog.removeListener(logListener)
     }
 
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_PICK_IMAGE && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            runCatching {
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            settings.avatarUri = uri.toString()
+            CompanionService.refresh(this)
+            toast(if (CompanionService.isRunning) "Companion image updated" else "Image saved — shows when you open the companion")
+        }
+    }
+
     private fun refreshStatus() {
         val acc = if (ControlService.get() != null) "ON" else "OFF — enable in Accessibility settings"
         val key = if (keySaved) "set" else "missing"
@@ -194,4 +215,8 @@ class MainActivity : Activity() {
     }
 
     @Suppress("unused") private fun unusedCheckbox() = CheckBox(this)
+
+    private companion object {
+        const val REQ_PICK_IMAGE = 2001
+    }
 }

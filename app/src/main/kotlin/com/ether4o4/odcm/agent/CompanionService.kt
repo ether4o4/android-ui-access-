@@ -38,6 +38,7 @@ class CompanionService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { stop(); return START_NOT_STICKY }
+        if (intent?.action == ACTION_REFRESH) { overlay?.reloadAvatar(); return START_STICKY }
         if (!canDrawOverlays(this)) { stopSelf(); return START_NOT_STICKY }
         if (overlay != null) return START_STICKY
 
@@ -46,6 +47,7 @@ class CompanionService : Service() {
         o.onClose = { stop() }
         o.show(CompanionOverlay.Mode.BOX)
         overlay = o
+        instance = this
         TaskLog.addListener(logListener)
         TaskLog.add("Companion ready.")
         return START_STICKY
@@ -55,6 +57,7 @@ class CompanionService : Service() {
         TaskLog.removeListener(logListener)
         overlay?.hide()
         overlay = null
+        if (instance === this) instance = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -63,6 +66,7 @@ class CompanionService : Service() {
         TaskLog.removeListener(logListener)
         overlay?.hide()
         overlay = null
+        if (instance === this) instance = null
         super.onDestroy()
     }
 
@@ -83,8 +87,12 @@ class CompanionService : Service() {
 
     companion object {
         const val ACTION_STOP = "com.ether4o4.odcm.COMPANION_STOP"
+        const val ACTION_REFRESH = "com.ether4o4.odcm.COMPANION_REFRESH"
         private const val CHANNEL = "odcm_companion"
         private const val NOTIF_ID = 43
+        @Volatile private var instance: CompanionService? = null
+
+        val isRunning: Boolean get() = instance != null
 
         fun canDrawOverlays(context: Context): Boolean =
             Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
@@ -95,6 +103,13 @@ class CompanionService : Service() {
 
         fun stop(context: Context) {
             context.startService(Intent(context, CompanionService::class.java).setAction(ACTION_STOP))
+        }
+
+        /** Tell a running companion to reload the user's chosen image. No-op if not running. */
+        fun refresh(context: Context) {
+            if (instance != null) {
+                context.startService(Intent(context, CompanionService::class.java).setAction(ACTION_REFRESH))
+            }
         }
     }
 }

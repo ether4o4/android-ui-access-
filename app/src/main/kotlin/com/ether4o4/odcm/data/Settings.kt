@@ -36,6 +36,10 @@ class Settings(context: Context) {
         get() = prefs.getString(KEY_PHRASE, "") ?: ""
         set(v) = prefs.edit().putString(KEY_PHRASE, v.trim()).apply()
 
+    var avatarUri: String
+        get() = prefs.getString(KEY_AVATAR, "") ?: ""
+        set(v) = prefs.edit().putString(KEY_AVATAR, v).apply()
+
     fun blockedList(): List<String> =
         blockedPackages.split(',', '\n', ' ').map { it.trim() }.filter { it.isNotEmpty() }
 
@@ -52,5 +56,6 @@ class Settings(context: Context) {
         private const val KEY_BLOCKED = "blocked"
         private const val KEY_CHAT = "inbox_chat"
         private const val KEY_PHRASE = "inbox_phrase"
+        private const val KEY_AVATAR = "avatar_uri"
     }
 }
