@@ -12,6 +12,8 @@ import com.ether4o4.odcm.control.ControlService
 import com.ether4o4.odcm.control.Overlay
 import com.ether4o4.odcm.data.SecretStore
 import com.ether4o4.odcm.data.Settings
+import com.ether4o4.odcm.guide.GuideStore
+import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -73,11 +75,14 @@ class AgentService : Service(), Overlay.Listener {
             systemPrompt = Prompt.system(settings.autonomy, settings.rules),
         )
         val policy = TaskRunner.policyFor(settings.autonomy, settings.blockedList())
+        // The vault lives in app external files so a file manager (and later Obsidian) can reach it.
+        val guideRoot = File(getExternalFilesDir(null) ?: filesDir, "ODCM Guide")
         val r = TaskRunner(
             control = control,
             launcher = AppLauncher(this),
             model = model,
             policy = policy,
+            guide = GuideStore(guideRoot),
             callbacks = object : TaskRunner.Callbacks {
                 override fun status(text: String) { overlay.status(text); notify(text) }
                 override fun reply(text: String) { replySink?.invoke(text) }

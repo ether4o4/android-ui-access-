@@ -5,10 +5,15 @@ import com.ether4o4.odcm.core.AgentAction
 import com.ether4o4.odcm.core.AutonomyLevel
 import com.ether4o4.odcm.core.Policy
 import com.ether4o4.odcm.core.ScreenFormatter
+import com.ether4o4.odcm.core.ScreenSnapshot
 import com.ether4o4.odcm.core.StepLimits
 import com.ether4o4.odcm.core.Verdict
+import com.ether4o4.odcm.guide.GuideIndex
+import com.ether4o4.odcm.guide.GuideNote
+import com.ether4o4.odcm.guide.GuideStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
+import java.time.LocalDate
 
 /**
  * The agent loop: observe the screen, ask the model, gate the action, act, repeat.
@@ -21,6 +26,7 @@ class TaskRunner(
     private val policy: Policy,
     private val callbacks: Callbacks,
     private val limits: StepLimits = StepLimits(),
+    private val guide: GuideStore? = null,
 ) {
     interface Callbacks {
         fun status(text: String)
@@ -38,6 +44,9 @@ class TaskRunner(
     fun pause() { paused = true }
     fun resume() { paused = false; resume?.complete(Unit); resume = null }
 
+    // The vault read once per task; learning updates it in memory and writes through to disk.
+    private val notes: MutableList<GuideNote> by lazy { guide?.allNotes()?.toMutableList() ?: mutableListOf() }
+
     suspend fun run(task: String) {
         model.addUserText("Task: $task")
         while (!stopped) {
@@ -47,7 +56,14 @@ class TaskRunner(
 
             callbacks.status("Reading the screen…")
             val screen = control.readScreen()
-            model.addUserText("Current screen:\n" + ScreenFormatter.format(screen))
+            val screenLabel = screenLabel(screen)
+            val context = StringBuilder("Current screen:\n").append(ScreenFormatter.format(screen))
+            if (notes.isNotEmpty()) {
+                val relevant = GuideIndex.rank(notes, task, screen.packageName, screenLabel)
+                val rendered = GuideIndex.render(relevant)
+                if (rendered.isNotEmpty()) context.append('\n').append(rendered)
+            }
+            model.addUserText(context.toString())
 
             callbacks.status("Thinking…")
             val decision = runCatching { model.next() }.getOrElse {
@@ -95,10 +111,27 @@ class TaskRunner(
                 control.perform(action)
             }
             limits.onResult(success)
+            if (success && action is AgentAction.Tap) learnTap(screen, screenLabel, action.index)
             ok(decision.toolUseId, if (success) "Action performed." else "Action failed; look at the screen and try another way.", !success)
             delay(callbacks.settleDelayMs())
         }
     }
+
+    /** Writes or strengthens a button note for a tap that worked, so next time is faster. */
+    private fun learnTap(screen: ScreenSnapshot, screenLabel: String, index: Int) {
+        val store = guide ?: return
+        val el = screen.elements.getOrNull(index) ?: return
+        runCatching {
+            store.recordButton(screen.packageName, screenLabel, el.viewId, el.text, el.centerX, el.centerY, today())
+            notes.removeAll { it.id == GuideNote.buttonId(screen.packageName, screenLabel, el.viewId, el.text) }
+            store.get(GuideNote.buttonId(screen.packageName, screenLabel, el.viewId, el.text))?.let { notes.add(it) }
+        }
+    }
+
+    private fun screenLabel(screen: ScreenSnapshot): String =
+        screen.elements.firstOrNull { it.text.isNotBlank() }?.text?.take(40) ?: "screen"
+
+    private fun today(): String = LocalDate.now().toString()
 
     private fun ok(id: String?, msg: String, isError: Boolean = false) {
         id?.let { model.addToolResult(it, msg, isError) }
