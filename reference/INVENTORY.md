@@ -70,3 +70,15 @@ Algo-Ai are web/React projects with nothing Android-control specific.
   5. **Footprint:** broad permissions (SMS, call log, contacts, calendar,
      sensors, `QUERY_ALL_PACKAGES`), cleartext traffic allowed, and a large
      dependency set (TFLite, CameraX, Retrofit, Room, Hilt, WorkManager).
+
+## Other agent projects checked (2026-11-15)
+
+| Project | Last update | Notes |
+|---|---|---|
+| **nanoMuse** (nano-muse/nanoMuse, `067384b7`) | 2026-11-13, v1.0.9 | Newest and furthest along. Android screen "Hands" through accessibility, with an overlay showing where it is about to tap. Telegram channel, your own Claude/OpenAI key while signed out, editable Markdown memory, approvals before delete/send/pay, takeover for logins and then *Done* resumes. Costs: about 266k lines of Kotlin, an embedded Alpine Linux (proot) that is heavy on battery and heat, defaults to a China-hosted relay, GPL-3.0. Not copied (94 MB); read it upstream. |
+| **claw-use-android** (claw-use/claw-use-android, `973d373`) | 2026-10-11, v2.1.0 | **Copied to `claw-use-android/`.** About 7.7k lines of Java, MIT. An accessibility bridge with screen → act → screen over a token-protected local HTTP API, plus **learned flows** (`flows.md`) that replay known UI sequences on the device with zero model calls. This matches the ODCM Guide idea. |
+| DroidClaw (unitedbyai) | 2026-02-28 | Stalled. TypeScript, drives the phone over ADB from a computer. |
+| DroidClaw (dgirard / Atum246) | Jun / Apr 2026 | Flutter/Dart, no accessibility screen control. |
+| mobileClaw (eggbrid2) | 2026-07-10 | Became a multi-agent "arena" game app, about 86k lines. |
+| PalmClaw | 2026-10-21 | No screen control. AGPL-3.0. |
+| Kai (SimonSchubert) | 2026-11-12 | Active, but no screen control. |
