@@ -8,13 +8,12 @@ import android.os.Build
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import com.ether4o4.odcm.R
 import kotlin.math.abs
 
 /**
@@ -32,7 +31,11 @@ class CompanionOverlay(private val context: Context) {
     private var mode = Mode.BOX
     private var posX = 40
     private var posY = 160
+    private val avatar = AvatarView(context)
     var onClose: (() -> Unit)? = null
+
+    /** Reflect an agent state word on the face (thinking, speaking, idle, error…). */
+    fun setState(state: String) = avatar.post { avatar.setState(state) }
 
     private val density = context.resources.displayMetrics.density
     private fun dp(v: Int) = (v * density).toInt()
@@ -79,13 +82,18 @@ class CompanionOverlay(private val context: Context) {
     private fun View.layoutHeightHint(): Int = (tag as? IntArray)?.get(1) ?: WindowManager.LayoutParams.WRAP_CONTENT
 
     private fun buildBubble(): View {
-        val img = ImageView(context).apply {
-            setImageResource(R.drawable.npc_placeholder)
+        val holder = LinearLayout(context).apply {
             background = circle(Color.argb(235, 12, 20, 36))
             tag = intArrayOf(dp(64), dp(64))
+            addView(detachedAvatar(), LinearLayout.LayoutParams(dp(60), dp(60)))
         }
-        attachDrag(img) { toggleTo(Mode.BOX) }
-        return img
+        attachDrag(holder) { toggleTo(Mode.BOX) }
+        return holder
+    }
+
+    private fun detachedAvatar(): AvatarView {
+        (avatar.parent as? ViewGroup)?.removeView(avatar)
+        return avatar
     }
 
     private fun buildPanel(width: Int, height: Int, big: Boolean): View {
@@ -99,9 +107,8 @@ class CompanionOverlay(private val context: Context) {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val face = ImageView(context).apply {
-            setImageResource(R.drawable.npc_placeholder)
-            layoutParams = LinearLayout.LayoutParams(dp(if (big) 72 else 48), dp(if (big) 72 else 48))
+        val face = detachedAvatar().apply {
+            layoutParams = LinearLayout.LayoutParams(dp(if (big) 84 else 48), dp(if (big) 84 else 48))
         }
         val title = TextView(context).apply {
             text = "ODCM"

@@ -20,6 +20,18 @@ class CompanionService : Service() {
     private var overlay: CompanionOverlay? = null
     private val logListener: (List<String>) -> Unit = { lines ->
         overlay?.setText(lines.takeLast(30).joinToString("\n").ifEmpty { "Idle. Give me a task." })
+        overlay?.setState(stateFrom(lines.lastOrNull().orEmpty()))
+    }
+
+    private fun stateFrom(line: String): String {
+        val l = line.lowercase()
+        return when {
+            "thinking" in l || "reading" in l || "working" in l || "waiting for approval" in l -> "thinking"
+            "reply:" in l || "done" in l -> "speaking"
+            "error" in l || "blocked" in l || "can't start" in l -> "error"
+            "ended" in l || "idle" in l -> "idle"
+            else -> "idle"
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
