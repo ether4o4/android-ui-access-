@@ -17,6 +17,8 @@ class Policy(
 ) {
     private val blocked = blockedPackages.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
 
+    fun isBlocked(packageName: String): Boolean = packageName.lowercase() in blocked
+
     fun check(action: AgentAction, screen: ScreenSnapshot?, launchTarget: String? = null): Verdict {
         // Hard line: never operate inside a blocked app, whatever the level.
         val currentPkg = screen?.packageName?.lowercase()
@@ -117,6 +119,8 @@ class StepLimits(
 
     fun onStep() { steps++ }
     fun onResult(ok: Boolean) { failures = if (ok) 0 else failures + 1 }
+
+    fun remainingMillis(): Long = (maxMillis - (clock() - start)).coerceAtLeast(0)
 
     /** Null while within limits, otherwise why the task must stop. */
     fun exceeded(): String? = when {

@@ -19,7 +19,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * The hands and eyes. Runs in the app's own process, so the agent calls these methods directly:
  * no cross-process broadcast, nothing exported, and no work while idle.
  */
-class ControlService : AccessibilityService() {
+class ControlService : AccessibilityService(), com.ether4o4.odcm.core.TaskControl {
 
     private val reader = ScreenReader()
     @Volatile private var lastRead: ScreenReader.Result? = null
@@ -51,7 +51,7 @@ class ControlService : AccessibilityService() {
     }
 
     @Suppress("DEPRECATION")
-    fun readScreen(): com.ether4o4.odcm.core.ScreenSnapshot {
+    override fun readScreen(): com.ether4o4.odcm.core.ScreenSnapshot {
         val currentDisplay = getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
         val metrics = DisplayMetrics().also { m -> currentDisplay?.getRealMetrics(m) ?: m.setTo(resources.displayMetrics) }
         val root = rootInActiveWindow
@@ -83,7 +83,7 @@ class ControlService : AccessibilityService() {
     private fun nodeAt(index: Int): AccessibilityNodeInfo? = lastRead?.nodes?.getOrNull(index)
 
     /** Performs an action and reports plainly whether it took effect. */
-    suspend fun perform(action: AgentAction): Boolean = when (action) {
+    override suspend fun perform(action: AgentAction): Boolean = when (action) {
         is AgentAction.Tap -> {
             val node = nodeAt(action.index) ?: return false
             val el = lastRead?.snapshot?.elements?.getOrNull(action.index)

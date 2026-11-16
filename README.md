@@ -87,8 +87,10 @@ requires a per-task approval for that app.
 
 Stop cancels an in-flight API request. Pause is checked again before acting.
 Approvals expire after 90 seconds; tasks have a 10-minute wall-clock limit and
-bounded step/failure counts. A dispatched tap is not promoted as a verified
-successful workflow. Plain-text model answers are handled, and parallel tool
+bounded step/failure counts. A dispatched tap is not treated as success; only an observed, uniquely identified
+control state change is learned as a successful button action. Installed-app
+awareness and unambiguous package resolution from the latest development branch
+are preserved. Plain-text model answers are handled, and parallel tool
 requests are disabled/rejected before acting.
 
 Run:

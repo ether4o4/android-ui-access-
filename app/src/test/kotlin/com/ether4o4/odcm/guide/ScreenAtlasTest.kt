@@ -35,11 +35,17 @@ class ScreenAtlasTest {
         assertFalse(map.markdown.contains("private value")); assertFalse(map.markdown.contains("secret123"))
     }
     @Test fun staleIndexResolvesByIdentityAndAmbiguityRefusesToAct() {
-        val before = screen(el())
+        val before = screen(el(), el(index = 1, label = "Delete").copy(viewId = "app:id/delete"))
         val after = screen(el(label = "Delete").copy(index = 0, viewId = "app:id/delete"), el(index = 1, x = 400))
         assertEquals(AgentAction.Tap(1), TaskRunner.remapAction(AgentAction.Tap(0), before, after))
         assertNull(TaskRunner.remapAction(AgentAction.Tap(0), before, screen(el(), el(1))))
         assertNull(TaskRunner.remapAction(AgentAction.TapKnown(ScreenIdentity.key(el())), before, after.copy(packageName = "other")))
+    }
+    @Test fun changedToggleOrDialogTextInvalidatesASavedAction() {
+        val toggle = el().copy(checked = false)
+        assertNull(TaskRunner.remapAction(AgentAction.TapKnown(ScreenIdentity.key(toggle)), screen(toggle), screen(toggle.copy(checked = true))))
+        val text = el(index = 1, label = "Delete document A?").copy(clickable = false, role = "text", viewId = "app:id/dialog")
+        assertNull(TaskRunner.remapAction(AgentAction.Tap(0), screen(el(), text), screen(el(), text.copy(text = "Delete document B?"))))
     }
     @Test fun missingAndUnseenScreensDoNotGetInventedCoordinates() {
         assertNull(ScreenAtlas(temp.root).observe(screen()))

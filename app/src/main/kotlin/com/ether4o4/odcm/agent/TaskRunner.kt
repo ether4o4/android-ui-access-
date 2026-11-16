@@ -1,6 +1,5 @@
 package com.ether4o4.odcm.agent
 
-import com.ether4o4.odcm.control.ControlService
 import com.ether4o4.odcm.core.*
 import com.ether4o4.odcm.guide.GuideIndex
 import com.ether4o4.odcm.guide.GuideStore
@@ -14,9 +13,9 @@ import org.json.JSONObject
 
 /** One task, one model action at a time. Every physical action uses a newly validated target. */
 class TaskRunner(
-    private val control: ControlService,
-    private val launcher: AppLauncher,
-    private val model: ModelClient,
+    private val control: TaskControl,
+    private val launcher: AppAccess,
+    private val model: TaskModel,
     private val policy: Policy,
     private val callbacks: Callbacks,
     private val limits: StepLimits = StepLimits(),
@@ -33,15 +32,25 @@ class TaskRunner(
 
     @Volatile private var stopped = false
     private val paused = MutableStateFlow(false)
+    @Volatile private var pauseGeneration = 0L
     fun stop() { stopped = true; paused.value = false }
-    fun pause() { paused.value = true }
+    fun pause() { if (!paused.value) pauseGeneration++; paused.value = true }
     fun resume() { paused.value = false }
     private var privateReferenceUsed = false
     private val sharingApproved = HashSet<String>()
 
-    suspend fun run(task: String) = withTimeout(10 * 60_000L) {
+    suspend fun run(task: String) {
+        val completed = withTimeoutOrNull(limits.remainingMillis()) { runLoop(task); true }
+        if (completed == null) callbacks.status("Stopped: task time limit reached")
+    }
+
+    private suspend fun runLoop(task: String) {
         model.addUserText("Task: $task")
-        val notes = withContext(Dispatchers.IO) { guide?.allNotes().orEmpty() }
+        val catalog = launcher.catalog()
+        val allowed = AppCatalog(catalog.apps.filterNot { policy.isBlocked(it.packageName) })
+        val installedApps = allowed.contextFor(task)
+        if (installedApps.isNotBlank()) model.addUserText(installedApps)
+        val notes = withContext(Dispatchers.IO) { guide?.allNotes().orEmpty().toMutableList() }
         if (vault != null) {
             try {
                 callbacks.status("Updating vault reference…")
@@ -51,7 +60,7 @@ class TaskRunner(
             catch (e: Exception) { callbacks.status("Vault unavailable: ${e.message}") }
         }
         while (!stopped) {
-            limits.exceeded()?.let { callbacks.status("Stopped: $it"); return@withTimeout }
+            limits.exceeded()?.let { callbacks.status("Stopped: $it"); return }
             awaitReady()
             if (stopped) break
             callbacks.status("Reading the screen…")
@@ -70,7 +79,7 @@ class TaskRunner(
             if (stopped) break
             limits.onStep()
             if (decision.toolName == null) {
-                if (decision.plainText.isNotBlank()) { callbacks.reply(decision.plainText); callbacks.status("Done"); return@withTimeout }
+                if (decision.plainText.isNotBlank()) { callbacks.reply(decision.plainText); callbacks.status("Done"); return }
                 limits.onResult(false)
                 model.addUserText("No action or reply was returned. Use an available tool or explain the result.")
                 continue
@@ -80,7 +89,7 @@ class TaskRunner(
             val action = parsed.getOrThrow()
             when (action) {
                 is AgentAction.Reply -> { callbacks.reply(action.text); ok(decision.toolUseId, "Delivered to the requesting user."); continue }
-                is AgentAction.Done -> { callbacks.reply(action.summary); callbacks.status("Done: ${action.summary}"); return@withTimeout }
+                is AgentAction.Done -> { callbacks.reply(action.summary); callbacks.status("Done: ${action.summary}"); return }
                 is AgentAction.Wait -> { delay(action.millis); ok(decision.toolUseId, "Waited."); continue }
                 is AgentAction.SearchVault, is AgentAction.ReadVault -> {
                     val result = try {
@@ -111,8 +120,17 @@ class TaskRunner(
 
             val fresh = control.readScreen()
             var actual = remapAction(action, screen, fresh)
-            if (actual == null) { fail(decision.toolUseId, "Screen changed or control is ambiguous; read the new screen and choose again."); continue }
-            val launchTarget = (actual as? AgentAction.OpenApp)?.let { launcher.find(it.name) }
+            if (actual == null) { fail(decision.toolUseId, "The screen changed or control is ambiguous; read the new screen and choose again."); continue }
+            val resolution = (actual as? AgentAction.OpenApp)?.let { catalog.resolve(it.name) }
+            if (resolution is AppCatalog.Resolution.Ambiguous) {
+                val choices = resolution.candidates.filterNot { policy.isBlocked(it.packageName) }
+                fail(decision.toolUseId, "App name is ambiguous. Ask which app, then use its exact package: " +
+                    choices.take(8).joinToString { "${it.label} (${it.packageName})" }); continue
+            }
+            if (resolution is AppCatalog.Resolution.Missing) {
+                fail(decision.toolUseId, "No launchable installed app matches. Ask for the installed name; do not invent packages."); continue
+            }
+            val launchTarget = (resolution as? AppCatalog.Resolution.Found)?.app
             when (val verdict = policy.check(actual, fresh, launchTarget?.packageName)) {
                 is Verdict.Block -> { fail(decision.toolUseId, "Blocked: ${verdict.reason}"); continue }
                 is Verdict.Ask -> {
@@ -132,15 +150,30 @@ class TaskRunner(
             val latest = control.readScreen()
             actual = remapAction(actual, fresh, latest)
             if (actual == null || (policy.check(actual, latest, launchTarget?.packageName) is Verdict.Block)) {
-                fail(decision.toolUseId, "Screen changed while waiting; no action was taken."); continue
+                fail(decision.toolUseId, "The screen changed while waiting; no action was taken."); continue
             }
             callbacks.status(Policy.describe(actual, latest.elements.getOrNull((actual as? AgentAction.Tap)?.index ?: -1)))
             currentCoroutineContext().ensureActive()
+            val beforePause = pauseGeneration
             val success = if (actual is AgentAction.OpenApp) launchTarget?.let { launcher.launch(it.packageName) } ?: false else control.perform(actual)
-            if (success) ok(decision.toolUseId, "Action dispatched. Verify its result on the next screen.")
-            else fail(decision.toolUseId, "Action failed; inspect the screen and choose another way.")
-            // A dispatched tap is not promoted to a verified learned outcome.
             delay(callbacks.settleDelayMs())
+            awaitReady()
+            if (stopped) break
+            val after = control.readScreen()
+            val observed = if (beforePause != pauseGeneration)
+                ActionObservation(false, "Control was paused after dispatch. A screen change may be manual; no successful action was learned.")
+                else ActionObservation.assess(actual, latest, after, success, launchTarget?.packageName)
+            if (observed.confirmed && actual is AgentAction.Tap && guide != null) {
+                val element = latest.elements.getOrNull(actual.index)
+                if (element != null) withContext(Dispatchers.IO) {
+                    val label = latest.elements.firstOrNull { it.text.isNotBlank() }?.text?.take(40) ?: "screen"
+                    guide.recordButton(latest.packageName, label, element.viewId, element.text, element.centerX, element.centerY, java.time.LocalDate.now().toString())
+                    val id = com.ether4o4.odcm.guide.GuideNote.buttonId(latest.packageName, label, element.viewId, element.text)
+                    notes.removeAll { it.id == id }; guide.get(id)?.let(notes::add)
+                }
+            }
+            callbacks.status(observed.message)
+            if (success) ok(decision.toolUseId, observed.message) else fail(decision.toolUseId, observed.message)
         }
     }
 
@@ -155,14 +188,17 @@ class TaskRunner(
     companion object {
         fun policyFor(level: AutonomyLevel, blocked: List<String>) = Policy(level, blocked)
         fun remapAction(action: AgentAction, previous: ScreenSnapshot, current: ScreenSnapshot): AgentAction? {
+            if (action !is AgentAction.OpenApp && !ScreenIdentity.sameContent(previous, current)) return null
             if (action is AgentAction.TapKnown) {
                 if (previous.packageName != current.packageName || previous.surface != current.surface) return null
-                return ScreenIdentity.resolve(action.key, current)?.takeIf { it.clickable }?.let { AgentAction.Tap(it.index) }
+                val old = ScreenIdentity.resolve(action.key, previous) ?: return null
+                return ScreenIdentity.remap(old, current)?.takeIf { it.clickable }?.let { AgentAction.Tap(it.index) }
             }
             if (action is AgentAction.Tap || action is AgentAction.TypeText) {
                 if (previous.packageName != current.packageName || previous.surface != current.surface) return null
                 val index = if (action is AgentAction.Tap) action.index else (action as AgentAction.TypeText).index
                 val old = previous.elements.getOrNull(index) ?: return null
+                if (action is AgentAction.TypeText && !old.editable) return null
                 val target = ScreenIdentity.remap(old, current) ?: return null
                 return if (action is AgentAction.Tap) AgentAction.Tap(target.index) else AgentAction.TypeText(target.index, (action as AgentAction.TypeText).text)
             }

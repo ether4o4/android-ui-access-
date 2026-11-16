@@ -35,7 +35,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 class AgentService : Service(), Overlay.Listener {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var job: Job? = null
     private var runner: TaskRunner? = null
     private var pendingApproval: CompletableDeferred<Boolean>? = null
@@ -57,7 +57,7 @@ class AgentService : Service(), Overlay.Listener {
     }
 
     private fun startTask(task: String, replyTarget: String?) {
-        if (job?.isActive == true) { TaskLog.add("Busy with another task; ignored: $task"); return }
+        if (job?.isCompleted == false) { TaskLog.add("Busy with another task; ignored: $task"); return }
         TaskLog.add("Task: $task")
         val control = ControlService.get()
         if (control == null) {
@@ -108,10 +108,8 @@ class AgentService : Service(), Overlay.Listener {
                     val d = CompletableDeferred<Boolean>()
                     pendingApproval = d
                     overlay.askApproval(reason)
-                    val answer = withTimeoutOrNull(90_000) { d.await() } ?: false
-                    if (pendingApproval === d) pendingApproval = null
-                    overlay.clearApproval()
-                    return answer
+                    try { return withTimeoutOrNull(90_000) { d.await() } ?: false }
+                    finally { if (pendingApproval === d) pendingApproval = null; overlay.clearApproval() }
                 }
             },
         )
@@ -131,7 +129,7 @@ class AgentService : Service(), Overlay.Listener {
 
     /** User-started observation session. Never opens apps, taps controls or calls a model. */
     private fun startLearning() {
-        if (job?.isActive == true) { TaskLog.add("Finish the current task before starting a learning session."); return }
+        if (job?.isCompleted == false) { TaskLog.add("Finish the current task before starting a learning session."); return }
         val control = ControlService.get()
         if (control == null) { TaskLog.add("Enable Accessibility before learning screens."); finish(); return }
         val knowledge = ScreenKnowledge(this)
@@ -187,6 +185,8 @@ class AgentService : Service(), Overlay.Listener {
         ControlService.get()?.onScreenChanged = null
         learningEvents?.close(); learningEvents = null
         job?.cancel()
+        pausedFlag = false
+        ControlService.get()?.overlay?.listener = null
         ControlService.get()?.overlay?.hide()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

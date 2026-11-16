@@ -106,6 +106,11 @@ object ScreenIdentity {
         screen.elements.filter { !it.password && key(it) == key }.singleOrNull()
     fun remap(old: ScreenElement, fresh: ScreenSnapshot): ScreenElement? = fresh.elements.filter {
         it.packageName == old.packageName && it.viewId == old.viewId && it.role == old.role &&
-            (if (old.editable) it.editable && !it.password else it.text == old.text) && !it.password
+            it.editable == old.editable && it.text == old.text && it.checked == old.checked && !it.password
     }.singleOrNull()
+    fun sameContent(before: ScreenSnapshot, after: ScreenSnapshot): Boolean {
+        fun content(s: ScreenSnapshot) = s.elements.filter { it.packageName.isBlank() || it.packageName == s.packageName }
+            .map { "${key(it)}|${if (it.viewId?.contains("clock", true) == true) "clock" else it.text}|${it.checked}|${it.password}" }.sorted()
+        return before.packageName == after.packageName && before.surface == after.surface && content(before) == content(after)
+    }
 }
