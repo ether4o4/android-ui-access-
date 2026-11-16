@@ -80,7 +80,7 @@ jobs:
           retention-days: 14
 
       - name: Publish rolling pre-release
-        if: github.event_name == 'push' && github.ref_name == 'claude/android-messaging-bridge-9vsv90'
+        if: github.ref_name == 'main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-latest
@@ -89,4 +89,6 @@ jobs:
           files: ODCM-debug.apk
           body: |
             Rolling debug build of ODCM. Installable (debug-signed); sideload on Android.
-            Built from the latest push to the development branch.
+            Built from main after unit tests, lint, and APK assembly pass.
+            Commit: ${{ github.sha }}
+            Download: https://github.com/ether4o4/android-ui-access-/releases/download/android-latest/ODCM-debug.apk
