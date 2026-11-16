@@ -1,8 +1,17 @@
 # ODCM — On-Device Control Module
 
-## Latest downloads
+## Companion chat update: 0.3.0 (build 9)
 
-- [Latest ODCM Local Preview APK](https://github.com/ether4o4/android-ui-access-/releases/download/local-preview-latest/ODCM-local-preview.apk) · [release notes and checksums](https://github.com/ether4o4/android-ui-access-/releases/tag/local-preview-latest)
+The source and bundled scenes for this update are on
+[`codex/companion-live-chat`](https://github.com/ether4o4/android-ui-access-/tree/codex/companion-live-chat).
+The [branch build](https://github.com/ether4o4/android-ui-access-/actions?query=branch%3Acodex%2Fcompanion-live-chat)
+produces an `ODCM-apks` artifact containing Debug, Preview, and Local Preview.
+CI-signed APKs may not update an existing locally signed installation. Build the
+matching variant on the same PC with its existing signing key to preserve data.
+
+### Earlier published builds
+
+- [Previously published ODCM Local Preview APK](https://github.com/ether4o4/android-ui-access-/releases/download/local-preview-latest/ODCM-local-preview.apk) · [release notes and checksums](https://github.com/ether4o4/android-ui-access-/releases/tag/local-preview-latest)
 - [Rolling development APK](https://github.com/ether4o4/android-ui-access-/releases/download/android-latest/ODCM-debug.apk) · [development release](https://github.com/ether4o4/android-ui-access-/releases/tag/android-latest)
 
 Local Preview uses `com.ether4o4.odcm.localpreview` and a persistent local signing
@@ -14,9 +23,27 @@ its CI debug signing key may differ between runs.
 
 ## Companion and AI providers
 
-The companion's face fills the center of the panel. A short live log shows the
-latest three entries; **Expand logs** opens the longer history, and collapsing
-returns to the face. Box, full and bubble modes preserve the current log.
+The medium window has the animated scene, a separate conversation, and a text
+composer anchored at the bottom. **Only the full window shows activity logs.**
+Draft text and conversation survive minimizing or changing window size. The
+keyboard is requested when the composer is tapped and released after sending;
+the panel adjusts when the keyboard is visible.
+
+Replies stream from the selected provider into chat. Follow-up messages sent
+while a phone task is running are consumed at decision boundaries: a new message
+invalidates a pending old action, including while approval is pending. Pause and
+Stop remain available. Without Accessibility, text chat and retrieved vault
+references work, but device-action tools are omitted. Completed chat is stored
+privately with bounded history; only recent conversation is used for continuity.
+Relevant conversation and vault excerpts go to the selected model provider.
+
+The supplied writing video is converted into a silent 5.5-second animated WebP
+with 132 frames at 24 fps and a blended boundary. It plays continuously while
+working. One retained decoder avoids restarting on chat/log updates or a video
+player seeking back to zero. It stops while idle, paused, screen-off, or closed.
+The supplied resting image (or the user's chosen avatar) is the idle scene.
+Talking and sleeping videos can be incorporated when supplied; live voice is
+not part of this change. See [scene provenance](art/companion/README.md).
 
 Select **AI provider**, enter its key when required, then tap **Save provider
 settings**. Model, endpoint and encrypted keys stay separate for each provider;
@@ -158,14 +185,13 @@ ambiguous/stale controls and network cancellation. Test-only dependencies are
 Robolectric (MIT), MockWebServer (Apache-2.0), JUnit (EPL-1.0), and org.json
 (public domain); none are packaged into the APK. No new runtime library was added.
 
-Local validation for 0.2.1: 119 unit tests pass; Debug and Local Preview lint
-report zero errors, and the Local Preview APK builds successfully. See the
-rolling release notes for the device checks completed with each APK. On a Samsung
-phone, the companion's compact/expanded/full layouts, persisted vault access,
-index/search, and screen learning across Home, app drawer, Quick settings and
-Settings were verified. Revisiting Home reused its saved key. Provider account
-access, model reliability, PDFs and extended battery behavior require their own
-live checks. See [the phone checklist](docs/PHONE_CHECKLIST.md).
+The prior 0.2.1 build had on-phone checks for vault access/search and screen
+learning. Those results do not verify the new 0.3.0 chat UI. New regression tests
+cover streamed text/tool assembly, incomplete streams, cancellation, follow-up
+messages invalidating actions, compact/full log visibility, and composer drafts.
+Build, lint, and test reports are attached to the branch's GitHub Actions run.
+Keyboard behavior, provider accounts, animation frame pacing, and state changes
+still require the [phone checklist](docs/PHONE_CHECKLIST.md) on the target device.
 
 ## Scope and references
 
