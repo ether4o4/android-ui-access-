@@ -18,6 +18,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewConfiguration
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
@@ -109,9 +110,13 @@ class CompanionOverlay(private val context: Context) {
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
         clamp(params)
-        root.setOnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_OUTSIDE) releaseKeyboard()
-            false
+        // The bubble already owns its touch listener for dragging and opening chat.
+        // Only panels need outside-touch handling for the keyboard.
+        if (mode != Mode.BUBBLE) {
+            root.setOnTouchListener { _, event ->
+                if (event.action == MotionEvent.ACTION_OUTSIDE) releaseKeyboard()
+                false
+            }
         }
         root.setOnApplyWindowInsetsListener { _, insets ->
             val imeHeight = insets.getInsets(WindowInsets.Type.ime()).bottom
@@ -290,16 +295,32 @@ class CompanionOverlay(private val context: Context) {
     private var startX = 0
     private var startY = 0
     private fun attachDrag(handle: View, tap: (() -> Unit)?) {
+        val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+        var dragging = false
+        if (tap != null) handle.setOnClickListener { tap() }
         handle.setOnTouchListener { _, e ->
             val lp = view?.layoutParams as? WindowManager.LayoutParams ?: return@setOnTouchListener false
-            when (e.action) {
-                MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY; startX = lp.x; startY = lp.y; true }
-                MotionEvent.ACTION_MOVE -> {
-                    lp.x = startX + (e.rawX - downX).toInt(); lp.y = startY + (e.rawY - downY).toInt()
-                    clamp(lp); posX = lp.x; posY = lp.y
-                    runCatching { wm.updateViewLayout(view, lp) }; true
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = e.rawX; downY = e.rawY; startX = lp.x; startY = lp.y
+                    dragging = false
+                    true
                 }
-                MotionEvent.ACTION_UP -> { if (abs(e.rawX - downX) + abs(e.rawY - downY) < dp(10)) tap?.invoke(); true }
+                MotionEvent.ACTION_MOVE -> {
+                    if (abs(e.rawX - downX) > touchSlop || abs(e.rawY - downY) > touchSlop) dragging = true
+                    if (dragging) {
+                        lp.x = startX + (e.rawX - downX).toInt(); lp.y = startY + (e.rawY - downY).toInt()
+                        clamp(lp); posX = lp.x; posY = lp.y
+                        runCatching { wm.updateViewLayout(view, lp) }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (!dragging && abs(e.rawX - downX) <= touchSlop && abs(e.rawY - downY) <= touchSlop) handle.performClick()
+                    dragging = false
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> { dragging = false; true }
                 else -> false
             }
         }

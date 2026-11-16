@@ -11,8 +11,8 @@ android {
         applicationId = "com.ether4o4.odcm"
         minSdk = 30
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.3.0"
+        versionCode = 10
+        versionName = "0.3.1"
         manifestPlaceholders["appLabel"] = "ODCM"
     }
 

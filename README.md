@@ -9,8 +9,10 @@ replace the APK at this same address after tests and lint pass. Download this
 single APK directly; there is no need to download or unpack the three-APK
 GitHub Actions artifact.
 
-Current app version: **0.3.0 (build 9)**, including companion chat and the
-continuous working scene. These changes are merged into `main`.
+Current app version: **0.3.1 (build 10)**, including companion chat and the
+continuous working scene. Version 0.3.1 fixes the minimized bubble so tapping
+opens chat and dragging moves it without accidentally opening it. These changes
+are merged into `main`.
 
 This download installs the `com.ether4o4.odcm.debug` package. Preview and Local
 Preview are separate installations. CI signing keys can differ between builds;
