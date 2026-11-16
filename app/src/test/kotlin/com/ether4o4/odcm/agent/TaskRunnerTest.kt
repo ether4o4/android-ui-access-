@@ -66,6 +66,29 @@ class TaskRunnerTest {
         guide: GuideStore? = null, limits: StepLimits = StepLimits()) =
         TaskRunner(device, apps, model, policy, callbacks, limits, guide)
 
+    @Test fun userMessageDuringDecisionPreventsTheOldAction() = runBlocking {
+        val device = Device(screen())
+        val model = Model("tap" to mapOf("index" to 0))
+        val task = runner(device, model)
+        var first = true
+        model.beforeDecision = { if (first) { first = false; assertTrue(task.addMessage("Do not tap; answer my question instead")) } }
+        task.run("Continue")
+        assertTrue(device.actions.isEmpty())
+        assertTrue(model.inputs.any { "User follow-up: Do not tap" in it })
+        assertTrue(model.results.any { "Not executed" in it })
+    }
+
+    @Test fun userMessageDuringApprovalInvalidatesTheOldAction() = runBlocking {
+        val device = Device(screen("Send"))
+        val model = Model("tap" to mapOf("index" to 0))
+        val callbacks = Callbacks()
+        val task = runner(device, model, callbacks, policy = Policy(AutonomyLevel.BALANCED, emptyList()))
+        callbacks.approve = { task.addMessage("Cancel that send"); true }
+        task.run("Send")
+        assertTrue(device.actions.isEmpty())
+        assertTrue(model.results.any { "new user guidance" in it })
+    }
+
     @Test fun switchedAppDuringModelCallNeverReceivesTheOldTap() = runBlocking {
         val device = Device(screen())
         val model = Model("tap" to mapOf("index" to 0))

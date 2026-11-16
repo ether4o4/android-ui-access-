@@ -45,6 +45,8 @@ class ModelClient(
     private val provider: ModelProvider = ModelProvider.ANTHROPIC,
     private val callFactory: Call.Factory = http,
     private val endpoint: String = provider.defaultEndpoint,
+    private val onTextDelta: ((String) -> Unit)? = null,
+    private val allowTools: Boolean = true,
 ) : TaskModel {
     private val history = JSONArray()
     private val anthropic = provider == ModelProvider.ANTHROPIC
@@ -85,9 +87,16 @@ class ModelClient(
 
     override suspend fun next(): ModelDecision {
         currentCoroutineContext().ensureActive()
-        val response = post(if (anthropic) anthropicBody() else chatBody())
+        val body = if (anthropic) anthropicBody() else chatBody()
+        if (!allowTools) { body.remove("tools"); body.remove("tool_choice"); body.remove("parallel_tool_calls") }
+        val response = if (onTextDelta == null) post(body) else postStream(body.put("stream", true))
         currentCoroutineContext().ensureActive()
         return try {
+            val end = if (anthropic) response.optString("stop_reason") else
+                response.optJSONArray("choices")?.optJSONObject(0)?.optString("finish_reason")
+            if (end in setOf("length", "max_tokens", "content_filter")) {
+                throw ModelException("The model response was cut short; no action was executed. Please retry or shorten the request.")
+            }
             if (anthropic) anthropicDecision(response) else chatDecision(response)
         } catch (e: JSONException) {
             throw ModelException("The model returned a malformed response; no action was executed.")
@@ -196,6 +205,7 @@ class ModelClient(
             ?: throw ModelException("The model returned an incomplete action; no action was executed.")
 
     private fun requireKnownTool(name: String) {
+        if (!allowTools) throw ModelException("Phone control is unavailable in this chat; no action was executed.")
         if ((0 until Tools.json.length()).none { Tools.json.getJSONObject(it).getString("name") == name }) {
             throw ModelException("The model requested an unknown action; no action was executed.")
         }
@@ -239,6 +249,53 @@ class ModelClient(
             }
         }
         throw ModelException("Could not connect to ${provider.label}. Check the endpoint and connection.")
+    }
+
+    private suspend fun postStream(body: JSONObject): JSONObject {
+        val builder = Request.Builder().url(endpoint).post(body.toString().toRequestBody(JSON))
+            .header("Accept", "text/event-stream")
+        if (anthropic) builder.header("x-api-key", apiKey).header("anthropic-version", API_VERSION)
+        else if (apiKey.isNotBlank()) builder.header("Authorization", "Bearer $apiKey")
+        val call = callFactory.newCall(builder.build())
+        return suspendCancellableCoroutine { continuation ->
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (continuation.isActive) continuation.resumeWithException(ModelException("Could not connect to ${provider.label}. Check the endpoint and connection."))
+                }
+                override fun onResponse(call: Call, response: Response) {
+                    try {
+                        val result = response.use { reply ->
+                            if (!reply.isSuccessful) throw ModelException(apiError(reply.code))
+                            val payload = reply.body ?: throw ModelException("The model returned an empty response.")
+                            if (payload.contentType()?.subtype?.contains("event-stream") != true) {
+                                // Some compatible servers ignore stream=true; retain a complete-response fallback.
+                                parseObject(payload.string())
+                            } else {
+                                val parser = MessageStream(anthropic) { part -> if (continuation.isActive) onTextDelta?.invoke(part) }
+                                val source = payload.source()
+                                val event = StringBuilder()
+                                while (continuation.isActive && !parser.complete && !source.exhausted()) {
+                                    val line = source.readUtf8LineStrict(128_000)
+                                    if (line.isEmpty()) {
+                                        if (event.isNotEmpty()) { parser.accept(event.toString().trimEnd('\n')); event.clear() }
+                                    } else if (line.startsWith("data:")) {
+                                        event.append(line.substring(5).removePrefix(" ")).append('\n')
+                                        if (event.length > 256_000) throw ModelException("The response stream exceeded its size limit.")
+                                    }
+                                }
+                                if (event.isNotEmpty() && !parser.complete) parser.accept(event.toString().trimEnd('\n'))
+                                parser.response()
+                            }
+                        }
+                        if (continuation.isActive) continuation.resume(result)
+                    } catch (e: Exception) {
+                        val safe = e as? ModelException ?: ModelException("The response stream was interrupted; no action was executed. Retry when connected.")
+                        if (continuation.isActive) continuation.resumeWithException(safe)
+                    }
+                }
+            })
+        }
     }
 
     private data class HttpPayload(val code: Int, val payload: String)

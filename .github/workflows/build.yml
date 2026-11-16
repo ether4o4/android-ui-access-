@@ -4,7 +4,7 @@ on:
   push:
     branches: [claude/android-messaging-bridge-9vsv90, main]
   pull_request:
-    branches: [claude/android-messaging-bridge-9vsv90, main, codex/obsidian-vault-reference]
+    branches: [claude/android-messaging-bridge-9vsv90, main, codex/obsidian-vault-reference, codex/companion-provider-phone-update]
   workflow_dispatch:
 
 permissions:
@@ -42,7 +42,7 @@ jobs:
         run: |
           set -e
           for attempt in 1 2 3; do
-            if ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:lintPreview :app:assemblePreview :app:lintLocalPreview; then
+            if ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:lintPreview :app:assemblePreview :app:lintLocalPreview :app:assembleLocalPreview; then
               exit 0
             fi
             echo "Gradle attempt $attempt failed (often a transient Maven 429); retrying…"
@@ -55,14 +55,16 @@ jobs:
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk ODCM-debug.apk
           cp app/build/outputs/apk/preview/app-preview.apk ODCM-preview.apk
+          cp app/build/outputs/apk/localPreview/app-localPreview.apk ODCM-local-preview.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ODCM-debug-apk
+          name: ODCM-apks
           path: |
             ODCM-debug.apk
             ODCM-preview.apk
+            ODCM-local-preview.apk
           if-no-files-found: error
           retention-days: 30
 
