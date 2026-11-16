@@ -1,25 +1,21 @@
 # ODCM — On-Device Control Module
 
-## Companion chat update: 0.3.0 (build 9)
+## Download ODCM
 
-The source and bundled scenes for this update are on
-[`codex/companion-live-chat`](https://github.com/ether4o4/android-ui-access-/tree/codex/companion-live-chat).
-The [branch build](https://github.com/ether4o4/android-ui-access-/actions?query=branch%3Acodex%2Fcompanion-live-chat)
-produces an `ODCM-apks` artifact containing Debug, Preview, and Local Preview.
-CI-signed APKs may not update an existing locally signed installation. Build the
-matching variant on the same PC with its existing signing key to preserve data.
+**[Download the latest ODCM APK](https://github.com/ether4o4/android-ui-access-/releases/download/android-latest/ODCM-debug.apk)**
 
-### Earlier published builds
+This is the permanent Android download link. Successful builds from `main`
+replace the APK at this same address after tests and lint pass. Download this
+single APK directly; there is no need to download or unpack the three-APK
+GitHub Actions artifact.
 
-- [Previously published ODCM Local Preview APK](https://github.com/ether4o4/android-ui-access-/releases/download/local-preview-latest/ODCM-local-preview.apk) · [release notes and checksums](https://github.com/ether4o4/android-ui-access-/releases/tag/local-preview-latest)
-- [Rolling development APK](https://github.com/ether4o4/android-ui-access-/releases/download/android-latest/ODCM-debug.apk) · [development release](https://github.com/ether4o4/android-ui-access-/releases/tag/android-latest)
+Current app version: **0.3.0 (build 9)**, including companion chat and the
+continuous working scene. These changes are merged into `main`.
 
-Local Preview uses `com.ether4o4.odcm.localpreview` and a persistent local signing
-key. It installs alongside the older Debug and GitHub Preview apps. Future Local
-Preview updates preserve its data with `adb install -r`; never uninstall another
-build to work around a signing conflict. Keep only the ODCM accessibility service
-you are using enabled. The rolling development build is a separate package and
-its CI debug signing key may differ between runs.
+This download installs the `com.ether4o4.odcm.debug` package. Preview and Local
+Preview are separate installations. CI signing keys can differ between builds;
+if Android reports a signing conflict, preserve the installed app and its data.
+Do not uninstall it to force an update.
 
 ## Companion and AI providers
 
@@ -85,10 +81,9 @@ vault and screen-key foundation to the existing ODCM application.
 
 ## Use it
 
-1. Install the APK and enable its accessibility service in Android settings.
-   The latest **ODCM Local Preview** uses `com.ether4o4.odcm.localpreview` so it
-   installs alongside the previous Debug and GitHub Preview builds.
-   Select its vault and API key separately; keep only one ODCM service active.
+1. Install the APK from **Download ODCM** above and enable its accessibility
+   service in Android settings. Select its vault and AI provider settings;
+   keep only one ODCM accessibility service active.
 2. Open **Obsidian vault · search and import** and select the same folder you
    use in Obsidian. Search works locally without an API key.
 3. Add notes or documents anywhere beneath that folder. Search and agent tasks
