@@ -11,8 +11,9 @@ android {
         applicationId = "com.ether4o4.odcm"
         minSdk = 30
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.1.5"
+        versionCode = 9
+        versionName = "0.3.0"
+        manifestPlaceholders["appLabel"] = "ODCM"
     }
 
     buildTypes {
@@ -23,6 +24,20 @@ android {
         }
         debug {
             applicationIdSuffix = ".debug"
+        }
+        create("preview") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-preview"
+            manifestPlaceholders["appLabel"] = "ODCM Preview"
+            matchingFallbacks += listOf("debug")
+        }
+        create("localPreview") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".localpreview"
+            versionNameSuffix = "-local-preview"
+            manifestPlaceholders["appLabel"] = "ODCM Local Preview"
+            matchingFallbacks += listOf("debug")
         }
     }
 
@@ -52,6 +67,7 @@ android {
         abortOnError = true
         checkReleaseBuilds = true
     }
+    testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
 dependencies {
@@ -63,4 +79,6 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("org.robolectric:robolectric:4.14.1")
 }

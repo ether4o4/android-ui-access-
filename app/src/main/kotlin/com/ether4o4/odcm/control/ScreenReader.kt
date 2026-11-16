@@ -10,11 +10,12 @@ import com.ether4o4.odcm.core.ScreenSnapshot
  * Walks the accessibility tree once and keeps only what a person could see and use.
  * The node list is kept alongside the snapshot so an index maps straight back to a node.
  */
-class ScreenReader(private val maxElements: Int = 120) {
+class ScreenReader(private val maxElements: Int = 512) {
 
     class Result(val snapshot: ScreenSnapshot, val nodes: List<AccessibilityNodeInfo>)
 
-    fun read(root: AccessibilityNodeInfo?, width: Int, height: Int, ownPackage: String): Result {
+    fun read(root: AccessibilityNodeInfo?, width: Int, height: Int, ownPackage: String,
+             extraRoots: List<AccessibilityNodeInfo> = emptyList()): Result {
         val elements = ArrayList<ScreenElement>()
         val nodes = ArrayList<AccessibilityNodeInfo>()
         var truncated = false
@@ -25,6 +26,7 @@ class ScreenReader(private val maxElements: Int = 120) {
         val screen = Rect(0, 0, width, height)
         val bounds = Rect()
         val stack = ArrayDeque<AccessibilityNodeInfo>()
+        extraRoots.asReversed().filter { it.packageName?.toString() != ownPackage }.forEach(stack::addLast)
         stack.addLast(root)
         while (stack.isNotEmpty()) {
             val node = stack.removeLast()
@@ -54,6 +56,7 @@ class ScreenReader(private val maxElements: Int = 120) {
                     scrollable = node.isScrollable,
                     checked = if (node.isCheckable) node.isChecked else null,
                     password = node.isPassword,
+                    packageName = node.packageName?.toString().orEmpty(),
                 )
                 nodes += node
             }

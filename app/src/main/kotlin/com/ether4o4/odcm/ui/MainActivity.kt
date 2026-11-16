@@ -15,6 +15,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.Spinner
+import android.widget.ArrayAdapter
+import android.widget.AdapterView
 import android.net.Uri
 import com.ether4o4.odcm.agent.AgentService
 import com.ether4o4.odcm.agent.CompanionService
@@ -23,6 +26,8 @@ import com.ether4o4.odcm.control.ControlService
 import com.ether4o4.odcm.core.AutonomyLevel
 import com.ether4o4.odcm.data.SecretStore
 import com.ether4o4.odcm.data.Settings
+import com.ether4o4.odcm.data.ModelProvider
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** One scrolling screen: keys, settings, and a box to type a task. Plain Views, no UI framework. */
 class MainActivity : Activity() {
@@ -31,36 +36,106 @@ class MainActivity : Activity() {
     private lateinit var secrets: SecretStore
     private lateinit var statusView: TextView
     private lateinit var logView: TextView
-    private var keySaved = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         settings = Settings(this)
         secrets = SecretStore(this)
-        keySaved = secrets.has(SecretStore.ANTHROPIC_KEY)
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; val p = dp(16); setPadding(p, p, p, p) }
         val scroll = ScrollView(this).apply { addView(root) }
         setContentView(scroll)
+        scroll.applyScreenInsets()
 
         root.addView(header("ODCM"))
+        root.addView(button("Obsidian vault · search and import") {
+            startActivity(Intent(this, VaultActivity::class.java))
+        })
+        root.addView(button("Learn while I browse · screen key") {
+            if (ControlService.get() == null) { toast("Enable Accessibility first"); return@button }
+            AgentService.learn(this)
+            toast("Browse your home screen, drawer, apps and sites. Stop or pause from the control bar.")
+        })
+        root.addView(hint("Every agent task also learns new screens automatically. Screen keys include actual coordinates and stay separated by app, layout and display settings."))
 
         statusView = TextView(this).apply { textSize = 13f; setPadding(0, 0, 0, dp(8)) }
         root.addView(statusView)
 
-        root.addView(label("Claude API key"))
-        val keyField = edit(if (secrets.has(SecretStore.ANTHROPIC_KEY)) "••••••••" else "", password = true)
-        root.addView(keyField)
-        root.addView(button("Save key") {
-            val v = keyField.text.toString()
-            if (v.isNotBlank() && v != "••••••••") {
-                secrets.put(SecretStore.ANTHROPIC_KEY, v.trim()); keySaved = true; toast("Key saved"); refreshStatus()
+        root.addView(label("AI provider"))
+        val providers = ModelProvider.entries
+        val providerPicker = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, providers.map { it.label })
+            setSelection(providers.indexOf(settings.provider))
+        }
+        root.addView(providerPicker)
+        val providerHelp = hint("")
+        root.addView(providerHelp)
+        root.addView(button("Open provider key page") {
+            val url = when (settings.provider) {
+                ModelProvider.GROQ -> "https://console.groq.com/keys"
+                ModelProvider.OPENROUTER -> "https://openrouter.ai/settings/keys"
+                ModelProvider.GEMINI -> "https://aistudio.google.com/api-keys"
+                ModelProvider.HUGGING_FACE -> "https://huggingface.co/settings/tokens"
+                ModelProvider.ANTHROPIC -> "https://platform.claude.com/settings/keys"
+                else -> null
             }
+            if (url == null) toast("Local/custom endpoints do not have a built-in key page")
+            else startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         })
-
+        root.addView(label("Provider API key (stored separately on this phone)"))
+        val keyField = edit("", password = true)
+        root.addView(keyField)
         root.addView(label("Model"))
         val modelField = edit(settings.model)
         root.addView(modelField)
+        root.addView(label("API endpoint"))
+        val endpointField = edit(settings.endpoint)
+        root.addView(endpointField)
+        fun showProvider() {
+            val provider = settings.provider
+            keyField.setText(if (secrets.has(provider.keyName)) "••••••••" else "")
+            keyField.hint = if (provider.requiresKey) "API key" else "Optional API key"
+            modelField.setText(settings.model)
+            endpointField.setText(settings.endpoint)
+            endpointField.isEnabled = provider in listOf(ModelProvider.OLLAMA, ModelProvider.CUSTOM)
+            providerHelp.text = when (provider) {
+                ModelProvider.GROQ -> "Free tier available with a Groq key; account limits apply. No automatic paid fallback."
+                ModelProvider.OPENROUTER -> "openrouter/free routes to free models that support tools. Free request limits apply; multi-step tasks use several requests."
+                ModelProvider.GEMINI -> "Free tier available for the preset model, subject to account limits. Google may use free-tier inputs to improve its products."
+                ModelProvider.HUGGING_FACE -> "Inference Providers requires credits or a qualifying plan; this is not a free-tier preset."
+                ModelProvider.OLLAMA -> "Runs on this phone. Open Termux and type phi first. No API key needed; use a model that supports tool calls."
+                ModelProvider.CUSTOM -> "Use an OpenAI-compatible chat/completions endpoint and a model with tool support. Remote endpoints require HTTPS; local HTTP is allowed only on this phone."
+                ModelProvider.ANTHROPIC -> "Uses Claude API credits. Local vault search and screen learning work without an API key."
+            } + if (provider == ModelProvider.OLLAMA) "" else " During agent tasks, screen text and relevant vault excerpts are sent to the selected provider."
+            refreshStatus()
+        }
+        fun saveProvider(): Boolean {
+            val provider = settings.provider
+            val endpoint = if (endpointField.isEnabled) endpointField.text.toString().trim() else provider.defaultEndpoint
+            val url = endpoint.toHttpUrlOrNull()
+            if (url == null || url.username.isNotEmpty() || url.password.isNotEmpty() || url.query != null || url.fragment != null ||
+                (!url.isHttps && url.host !in setOf("127.0.0.1", "localhost", "::1"))) {
+                toast("Use an HTTPS endpoint, or HTTP on localhost. Do not put a key in the URL.")
+                return false
+            }
+            if (modelField.text.toString().isBlank()) { toast("Enter a model name"); return false }
+            settings.model = modelField.text.toString()
+            settings.endpoint = endpoint
+            val key = keyField.text.toString().trim()
+            if (key.isNotEmpty() && key != "••••••••") secrets.put(provider.keyName, key)
+            if (secrets.has(provider.keyName)) keyField.setText("••••••••")
+            refreshStatus()
+            return true
+        }
+        providerPicker.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                settings.provider = providers[position]
+                showProvider()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+        showProvider()
+        root.addView(button("Save provider settings") { if (saveProvider()) toast("Provider settings saved") })
 
         root.addView(label("Autonomy"))
         val autonomy = TextView(this)
@@ -87,7 +162,7 @@ class MainActivity : Activity() {
         root.addView(phraseField)
 
         root.addView(button("Save settings") {
-            settings.model = modelField.text.toString()
+            if (!saveProvider()) return@button
             settings.autonomy = levels[levelIndex]
             settings.rules = rulesField.text.toString()
             settings.blockedPackages = blockedField.text.toString()
@@ -103,7 +178,7 @@ class MainActivity : Activity() {
         root.addView(button("Open Notification access settings") {
             startActivity(Intent(AndroidSettings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         })
-        root.addView(hint("Enable ODCM in both, plus allow restricted settings if Android asks."))
+        root.addView(hint("Accessibility enables screen learning and control. Notification access is only needed for the optional Telegram inbox. Allow restricted settings if Android asks."))
 
         root.addView(divider())
         root.addView(label("Companion overlay"))
@@ -134,8 +209,10 @@ class MainActivity : Activity() {
             val task = taskField.text.toString().trim()
             if (task.isEmpty()) { toast("Type a task first"); return@button }
             if (ControlService.get() == null) { toast("Enable Accessibility for ODCM first"); refreshStatus(); return@button }
-            if (!keySaved) { toast("Save your Claude API key first"); return@button }
-            settings.model = modelField.text.toString()
+            if (!saveProvider()) return@button
+            if (settings.provider.requiresKey && !secrets.has(settings.provider.keyName)) {
+                toast("Save your ${settings.provider.label} API key first"); return@button
+            }
             settings.autonomy = levels[levelIndex]
             settings.rules = rulesField.text.toString()
             settings.blockedPackages = blockedField.text.toString()
@@ -181,8 +258,9 @@ class MainActivity : Activity() {
 
     private fun refreshStatus() {
         val acc = if (ControlService.get() != null) "ON" else "OFF — enable in Accessibility settings"
-        val key = if (keySaved) "set" else "missing"
-        statusView.text = "Accessibility: $acc\nAPI key: $key"
+        val provider = settings.provider
+        val key = if (secrets.has(provider.keyName)) "set" else if (provider.requiresKey) "missing" else "not required"
+        statusView.text = "Accessibility: $acc\n${provider.label} · API key: $key"
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()

@@ -4,10 +4,14 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.os.Bundle
+import android.hardware.display.DisplayManager
+import android.view.Display
+import android.util.DisplayMetrics
+import android.view.accessibility.AccessibilityWindowInfo
+import com.ether4o4.odcm.data.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.ether4o4.odcm.core.AgentAction
-import com.ether4o4.odcm.core.TaskControl
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -15,10 +19,12 @@ import kotlinx.coroutines.withTimeoutOrNull
  * The hands and eyes. Runs in the app's own process, so the agent calls these methods directly:
  * no cross-process broadcast, nothing exported, and no work while idle.
  */
-class ControlService : AccessibilityService(), TaskControl {
+class ControlService : AccessibilityService(), com.ether4o4.odcm.core.TaskControl {
 
     private val reader = ScreenReader()
     @Volatile private var lastRead: ScreenReader.Result? = null
+    @Volatile var onScreenChanged: (() -> Unit)? = null
+    @Volatile private var surface = ""
 
     val overlay by lazy { Overlay(this) }
 
@@ -26,7 +32,12 @@ class ControlService : AccessibilityService(), TaskControl {
         instance = this
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && event.packageName?.toString() != packageName) {
+            surface = event.className?.toString().orEmpty()
+        }
+        onScreenChanged?.invoke()
+    }
     override fun onInterrupt() {}
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {
@@ -39,16 +50,39 @@ class ControlService : AccessibilityService(), TaskControl {
         super.onDestroy()
     }
 
+    @Suppress("DEPRECATION")
     override fun readScreen(): com.ether4o4.odcm.core.ScreenSnapshot {
-        val metrics = resources.displayMetrics
-        val result = reader.read(rootInActiveWindow, metrics.widthPixels, metrics.heightPixels, packageName)
-        lastRead = result
-        return result.snapshot
+        val currentDisplay = getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
+        val metrics = DisplayMetrics().also { m -> currentDisplay?.getRealMetrics(m) ?: m.setTo(resources.displayMetrics) }
+        val root = rootInActiveWindow
+        val pkg = root?.packageName?.toString().orEmpty()
+        val blocked = Settings(this).blockedList()
+        if (pkg in blocked) {
+            val empty = com.ether4o4.odcm.core.ScreenSnapshot(pkg, metrics.widthPixels, metrics.heightPixels, emptyList(), false)
+            lastRead = ScreenReader.Result(empty, emptyList())
+            return empty
+        }
+        val extra = windows.filter { it.id != root?.windowId &&
+            (it.type == AccessibilityWindowInfo.TYPE_SYSTEM || it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) }
+            .mapNotNull { it.root }.filter { it.packageName?.toString() !in blocked }
+        val result = reader.read(root, metrics.widthPixels, metrics.heightPixels, packageName, extra)
+        val location = result.snapshot.elements.firstOrNull {
+            it.viewId?.let { id -> listOf("url_bar", "address_bar", "location_bar", "omnibox").any(id::contains) } == true
+        }?.text?.let { text -> runCatching {
+            val url = java.net.URI(if (text.contains("://")) text else "https://$text")
+            url.host?.let { "$it${url.path.orEmpty()}" }
+        }.getOrNull() }.orEmpty()
+        val version = runCatching { packageManager.getPackageInfo(pkg, 0).longVersionCode.toString() }.getOrDefault("")
+        val snapshot = result.snapshot.copy(surface = surface + if (location.isNotBlank()) " | $location" else "",
+            rotation = currentDisplay?.rotation ?: 0, density = metrics.density, fontScale = resources.configuration.fontScale,
+            appVersion = version, device = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} API ${android.os.Build.VERSION.SDK_INT}")
+        lastRead = ScreenReader.Result(snapshot, result.nodes)
+        return snapshot
     }
 
     private fun nodeAt(index: Int): AccessibilityNodeInfo? = lastRead?.nodes?.getOrNull(index)
 
-    /** Reports dispatch acceptance; the runner separately observes the resulting screen. */
+    /** Performs an action and reports plainly whether it took effect. */
     override suspend fun perform(action: AgentAction): Boolean = when (action) {
         is AgentAction.Tap -> {
             val node = nodeAt(action.index) ?: return false
@@ -63,6 +97,9 @@ class ControlService : AccessibilityService(), TaskControl {
         is AgentAction.Swipe -> swipe(action.direction)
         AgentAction.Back -> performGlobalAction(GLOBAL_ACTION_BACK)
         AgentAction.Home -> performGlobalAction(GLOBAL_ACTION_HOME)
+        AgentAction.Recents -> performGlobalAction(GLOBAL_ACTION_RECENTS)
+        AgentAction.Notifications -> performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+        AgentAction.QuickSettings -> performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS)
         is AgentAction.Wait -> true
         else -> true // OpenApp, Reply, Done handled by the runner, not the hands.
     }
