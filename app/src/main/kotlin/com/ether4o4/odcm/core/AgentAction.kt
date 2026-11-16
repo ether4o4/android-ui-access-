@@ -7,6 +7,14 @@ sealed class AgentAction {
     data class Swipe(val direction: Direction) : AgentAction()
     data object Back : AgentAction()
     data object Home : AgentAction()
+    data object Recents : AgentAction()
+    data object Notifications : AgentAction()
+    data object QuickSettings : AgentAction()
+    data class TapKnown(val key: String) : AgentAction()
+    data class SearchVault(val query: String) : AgentAction()
+    data class ReadVault(val path: String, val offset: Int) : AgentAction()
+    data class ReadScreenMap(val offset: Int) : AgentAction()
+    data class ReadScreen(val offset: Int) : AgentAction()
     data class OpenApp(val name: String) : AgentAction()
     data class Wait(val millis: Long) : AgentAction()
     data class Reply(val text: String) : AgentAction()
@@ -32,12 +40,27 @@ sealed class AgentAction {
                 )
                 "back" -> Back
                 "home" -> Home
+                "recents" -> Recents
+                "notifications" -> Notifications
+                "quick_settings" -> QuickSettings
+                "tap_known" -> TapKnown(textArg(args, "key").also { require(it.matches(Regex("[0-9a-f]{16}"))) { "Use a key from the current screen map" } })
+                "search_vault" -> SearchVault(textArg(args, "query"))
+                "read_vault" -> ReadVault(textArg(args, "path"), offsetArg(args))
+                "read_screen_map" -> ReadScreenMap(offsetArg(args))
+                "read_screen" -> ReadScreen(offsetArg(args))
                 "open_app" -> OpenApp(textArg(args, "name"))
                 "wait" -> Wait(msArg(args, "ms").coerceIn(100L, MAX_WAIT_MS))
                 "reply" -> Reply(textArg(args, "text"))
                 "done" -> Done(textArg(args, "summary"))
                 else -> throw IllegalArgumentException("unknown tool '$name'")
             }
+        }
+
+        private fun offsetArg(args: Map<String, Any?>): Int {
+            val value = args["offset"] ?: return 0
+            val n = (value as? Number)?.toDouble() ?: value.toString().toDoubleOrNull()
+            require(n != null && n >= 0 && n <= 8_000_000 && n == kotlin.math.floor(n)) { "offset must be a non-negative character offset" }
+            return n.toInt()
         }
 
         private fun intArg(args: Map<String, Any?>, key: String): Int {

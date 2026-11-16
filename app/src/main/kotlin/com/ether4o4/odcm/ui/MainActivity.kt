@@ -44,6 +44,15 @@ class MainActivity : Activity() {
         setContentView(scroll)
 
         root.addView(header("ODCM"))
+        root.addView(button("Obsidian vault · search and import") {
+            startActivity(Intent(this, VaultActivity::class.java))
+        })
+        root.addView(button("Learn while I browse · screen key") {
+            if (ControlService.get() == null) { toast("Enable Accessibility first"); return@button }
+            AgentService.learn(this)
+            toast("Browse your home screen, drawer, apps and sites. Stop or pause from the control bar.")
+        })
+        root.addView(hint("Every agent task also learns new screens automatically. Screen keys include actual coordinates and stay separated by app, layout and display settings."))
 
         statusView = TextView(this).apply { textSize = 13f; setPadding(0, 0, 0, dp(8)) }
         root.addView(statusView)

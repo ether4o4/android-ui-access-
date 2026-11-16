@@ -15,6 +15,7 @@ data class ScreenElement(
     val scrollable: Boolean,
     val checked: Boolean?,
     val password: Boolean,
+    val packageName: String = "",
 ) {
     val centerX: Int get() = (left + right) / 2
     val centerY: Int get() = (top + bottom) / 2
@@ -26,19 +27,27 @@ data class ScreenSnapshot(
     val height: Int,
     val elements: List<ScreenElement>,
     val truncated: Boolean,
+    val surface: String = "",
+    val rotation: Int = 0,
+    val density: Float = 1f,
+    val fontScale: Float = 1f,
+    val appVersion: String = "",
+    val device: String = "",
 )
 
 /** Turns a snapshot into the compact text the model reads. Kept stable so prompts cache well. */
 object ScreenFormatter {
     const val MAX_TEXT = 80
 
-    fun format(snapshot: ScreenSnapshot): String = buildString {
+    fun format(snapshot: ScreenSnapshot, compact: Boolean = false): String = buildString {
         append("app: ").append(snapshot.packageName)
         append(" | screen ").append(snapshot.width).append('x').append(snapshot.height).append('\n')
         if (snapshot.elements.isEmpty()) {
             append("(no readable elements: the screen may be a game, video, or protected content)\n")
         }
-        for (e in snapshot.elements) {
+        val shown = if (compact) snapshot.elements.filter { it.clickable || it.editable || it.scrollable || it.checked != null || it.index < 5 }
+            else snapshot.elements
+        for (e in shown) {
             append('[').append(e.index).append("] ").append(e.role)
             if (e.text.isNotEmpty()) append(" \"").append(clip(e.text)).append('"')
             val flags = buildList {
@@ -50,10 +59,12 @@ object ScreenFormatter {
                 if (e.password) add("password")
             }
             if (flags.isNotEmpty()) append(" (").append(flags.joinToString(",")).append(')')
+            if (e.clickable && !e.password) append(" key=").append(ScreenIdentity.key(e))
             append(" @").append(e.centerX).append(',').append(e.centerY)
             append('\n')
         }
         if (snapshot.truncated) append("(list truncated; scroll to see more)\n")
+        if (shown.size < snapshot.elements.size) append("(${snapshot.elements.size - shown.size} non-control elements omitted on this known screen; use read_screen for all visible text)\n")
     }
 
     fun clip(text: String): String {
@@ -77,4 +88,24 @@ object ScreenFormatter {
             else -> simple
         }
     }
+}
+
+/** Stable controls are matched against a fresh tree, never blindly tapped at saved coordinates. */
+object ScreenIdentity {
+    fun label(e: ScreenElement): String = when {
+        e.password -> "[password field]"
+        e.editable -> "[editable field]"
+        e.viewId?.contains("clock", true) == true -> "Clock / time"
+        !e.clickable && e.checked == null && e.viewId != null -> e.viewId.substringAfterLast('/')
+        else -> e.text.take(160)
+    }
+    fun key(e: ScreenElement): String = hash("${e.packageName}|${e.viewId.orEmpty()}|${e.role}|${label(e)}").take(16)
+    fun hash(text: String): String = java.security.MessageDigest.getInstance("SHA-256")
+        .digest(text.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    fun resolve(key: String, screen: ScreenSnapshot): ScreenElement? =
+        screen.elements.filter { !it.password && key(it) == key }.singleOrNull()
+    fun remap(old: ScreenElement, fresh: ScreenSnapshot): ScreenElement? = fresh.elements.filter {
+        it.packageName == old.packageName && it.viewId == old.viewId && it.role == old.role &&
+            (if (old.editable) it.editable && !it.password else it.text == old.text) && !it.password
+    }.singleOrNull()
 }

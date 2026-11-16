@@ -40,6 +40,10 @@ class Settings(context: Context) {
         get() = prefs.getString(KEY_AVATAR, "") ?: ""
         set(v) = prefs.edit().putString(KEY_AVATAR, v).apply()
 
+    var vaultUri: String
+        get() = prefs.getString("vault_uri", "") ?: ""
+        set(v) = prefs.edit().putString("vault_uri", v).apply()
+
     fun blockedList(): List<String> =
         blockedPackages.split(',', '\n', ' ').map { it.trim() }.filter { it.isNotEmpty() }
 

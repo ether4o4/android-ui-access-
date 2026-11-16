@@ -2,12 +2,19 @@ package com.ether4o4.odcm.agent
 
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Response
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /** One decision from the model: the first tool call, its parsed arguments, and any plain text. */
 class ModelDecision(
@@ -29,6 +36,7 @@ class ModelClient(
     private val model: String,
     private val effort: String,
     private val systemPrompt: String,
+    private val endpoint: String = ENDPOINT,
 ) {
     private val history = JSONArray()
 
@@ -45,7 +53,7 @@ class ModelClient(
         history.put(message("user", JSONArray().put(tr)))
     }
 
-    fun next(): ModelDecision {
+    suspend fun next(): ModelDecision {
         val body = JSONObject()
             .put("model", model)
             .put("max_tokens", 4096)
@@ -57,10 +65,13 @@ class ModelClient(
                 },
             ))
             .put("tools", Tools.json)
+            .put("tool_choice", JSONObject().put("type", "auto").put("disable_parallel_tool_use", true))
             .put("messages", history)
 
         val response = post(body)
         val content = response.optJSONArray("content") ?: JSONArray()
+        val toolCount = (0 until content.length()).count { content.optJSONObject(it)?.optString("type") == "tool_use" }
+        require(toolCount <= 1) { "Model returned multiple actions; no action was executed. Retry the task." }
         // Echo the assistant turn (including any tool_use blocks) so the next request is valid.
         history.put(message("assistant", content))
 
@@ -82,9 +93,9 @@ class ModelClient(
         return ModelDecision(toolId, toolName, toolArgs, text.toString().trim(), response.optString("stop_reason", null))
     }
 
-    private fun post(body: JSONObject): JSONObject {
+    private suspend fun post(body: JSONObject): JSONObject {
         val request = Request.Builder()
-            .url(ENDPOINT)
+            .url(endpoint)
             .addHeader("x-api-key", apiKey)
             .addHeader("anthropic-version", API_VERSION)
             .addHeader("content-type", "application/json")
@@ -93,22 +104,36 @@ class ModelClient(
         var lastError: IOException? = null
         repeat(2) { attempt ->
             try {
-                http.newCall(request).execute().use { resp ->
-                    val payload = resp.body?.string().orEmpty()
-                    if (resp.isSuccessful) return JSONObject(payload)
-                    // 429 and 5xx are worth one retry; everything else is final.
-                    if (resp.code == 429 || resp.code >= 500) {
-                        lastError = IOException("HTTP ${resp.code}")
-                        if (attempt == 0) { Thread.sleep(1500); return@repeat }
-                    }
-                    throw ModelException(apiError(resp.code, payload))
+                val (code, payload) = execute(request)
+                if (code in 200..299) return JSONObject(payload)
+                // 429 and 5xx are worth one retry; everything else is final.
+                if (code == 429 || code >= 500) {
+                    lastError = IOException("HTTP $code")
+                    if (attempt == 0) { delay(1500); return@repeat }
                 }
+                throw ModelException(apiError(code, payload))
             } catch (e: IOException) {
                 lastError = e
-                if (attempt == 0) { Thread.sleep(1000); return@repeat }
+                if (attempt == 0) { delay(1000); return@repeat }
             }
         }
         throw ModelException("Network error: ${lastError?.message}")
+    }
+
+    private suspend fun execute(request: Request): Pair<Int, String> = suspendCancellableCoroutine { continuation ->
+        val call = http.newCall(request)
+        continuation.invokeOnCancellation { call.cancel() }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (continuation.isActive) continuation.resumeWithException(e)
+            }
+            override fun onResponse(call: Call, response: Response) {
+                try {
+                    val result = response.use { it.code to it.body?.string().orEmpty() }
+                    if (continuation.isActive) continuation.resume(result)
+                } catch (e: Exception) { if (continuation.isActive) continuation.resumeWithException(e) }
+            }
+        })
     }
 
     private fun apiError(code: Int, payload: String): String {
