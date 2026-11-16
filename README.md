@@ -9,10 +9,9 @@ replace the APK at this same address after tests and lint pass. Download this
 single APK directly; there is no need to download or unpack the three-APK
 GitHub Actions artifact.
 
-Current app version: **0.3.1 (build 10)**, including companion chat and the
-continuous working scene. Version 0.3.1 fixes the minimized bubble so tapping
-opens chat and dragging moves it without accidentally opening it. These changes
-are merged into `main`.
+Current app version: **0.3.2 (build 11)**, including companion chat, continuous
+writing during tasks, and the supplied sleeping animation while idle or paused.
+The minimized bubble supports tapping to open chat and dragging to move it.
 
 This download installs the `com.ether4o4.odcm.debug` package. Preview and Local
 Preview are separate installations. CI signing keys can differ between builds;
@@ -38,10 +37,13 @@ Relevant conversation and vault excerpts go to the selected model provider.
 The supplied writing video is converted into a silent 5.5-second animated WebP
 with 132 frames at 24 fps and a blended boundary. It plays continuously while
 working. One retained decoder avoids restarting on chat/log updates or a video
-player seeking back to zero. It stops while idle, paused, screen-off, or closed.
-The supplied resting image (or the user's chosen avatar) is the idle scene.
-Talking and sleeping videos can be incorporated when supplied; live voice is
-not part of this change. See [scene provenance](art/companion/README.md).
+player seeking back to zero. Idle and paused states play the supplied sleeping
+scene as a silent 19.9-second loop; a chosen custom avatar still overrides idle.
+Both scenes run entirely on Android without an API key or network requests.
+Playback stops when the screen is off, the scene is hidden by the keyboard, or
+the overlay is closed. A request error returns to idle without stopping the
+sleeping scene. Talking footage and live voice are not yet integrated.
+See [scene provenance](art/companion/README.md).
 
 Select **AI provider**, enter its key when required, then tap **Save provider
 settings**. Model, endpoint and encrypted keys stay separate for each provider;

@@ -18,18 +18,17 @@ import kotlinx.coroutines.withContext
 /** One retained decoder per scene: text/log updates never seek, re-open or restart the working loop. */
 class CompanionMedia(private val context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var image: ImageView? = null
+    private val player = CompanionScenePlayer()
     private var working: Drawable? = null
+    private var sleeping: Drawable? = null
     private var resting: Drawable? = null
     private var active = false
-    private var screenOn = true
     private var generation = 0
 
     init { load() }
 
     fun bind(target: ImageView) {
-        image?.setImageDrawable(null)
-        image = target
+        player.bind(target)
         display()
     }
 
@@ -39,7 +38,8 @@ class CompanionMedia(private val context: Context) {
         display()
     }
 
-    fun setScreenOn(value: Boolean) { screenOn = value; display() }
+    fun setScreenOn(value: Boolean) { player.setScreenOn(value) }
+    fun setVisible(value: Boolean) { player.setVisible(value) }
 
     fun reload() { load() }
 
@@ -48,16 +48,17 @@ class CompanionMedia(private val context: Context) {
         scope.launch {
             val decoded = withContext(Dispatchers.IO) {
                 val work = working ?: decode(ImageDecoder.createSource(context.resources, R.drawable.companion_working))
+                val sleep = sleeping ?: decode(ImageDecoder.createSource(context.resources, R.drawable.companion_sleeping))
                 val custom = Settings(context).avatarUri
                 val rest = if (custom.isNotBlank()) runCatching {
                     decode(ImageDecoder.createSource(context.contentResolver, Uri.parse(custom)))
                 }.getOrNull() else null
-                work to (rest ?: decode(ImageDecoder.createSource(context.resources, R.drawable.companion_resting)))
+                Triple(work, sleep, rest ?: sleep ?: decode(ImageDecoder.createSource(context.resources, R.drawable.companion_resting)))
             }
             if (current != generation) return@launch
-            (resting as? AnimatedImageDrawable)?.stop()
             working = decoded.first
-            resting = decoded.second
+            sleeping = decoded.second
+            resting = decoded.third
             display()
         }
     }
@@ -70,23 +71,13 @@ class CompanionMedia(private val context: Context) {
     }.getOrNull()
 
     private fun display() {
-        val target = image
         val shown = if (active) working ?: resting else resting
-        if (target?.drawable !== shown) target?.setImageDrawable(shown)
-        for (drawable in listOf(working, resting)) {
-            val animation = drawable as? AnimatedImageDrawable ?: continue
-            // Resting scenes stay still. Future talking/sleeping clips can be separate scene slots.
-            if (target != null && screenOn && active && drawable === shown) {
-                if (!animation.isRunning) animation.start()
-            } else animation.stop()
-        }
+        player.show(shown)
     }
 
     fun unbind() {
-        image?.setImageDrawable(null)
-        image = null
-        display()
+        player.unbind()
     }
 
-    fun close() { unbind(); scope.cancel(); working = null; resting = null }
+    fun close() { generation++; player.close(); scope.cancel(); working = null; sleeping = null; resting = null }
 }

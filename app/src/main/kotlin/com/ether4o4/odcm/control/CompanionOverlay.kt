@@ -122,6 +122,7 @@ class CompanionOverlay(private val context: Context) {
             val imeHeight = insets.getInsets(WindowInsets.Type.ime()).bottom
             val keyboard = editing && imeHeight > 0
             face?.visibility = if (keyboard) View.GONE else View.VISIBLE
+            media.setVisible(!keyboard)
             val lp = view?.layoutParams as? WindowManager.LayoutParams
             if (lp != null) {
                 val available = availableSize().second
@@ -136,10 +137,11 @@ class CompanionOverlay(private val context: Context) {
         }
         runCatching { wm.addView(root, params) }.onSuccess {
             view = root
+            media.setVisible(true)
             updateChat(); updateLogs()
             chatScroll?.let { s -> s.post { if (chatFollows) s.fullScroll(View.FOCUS_DOWN) else s.scrollTo(0, chatScrollY) } }
             logScroll?.let { s -> s.post { if (logFollows) s.fullScroll(View.FOCUS_DOWN) else s.scrollTo(0, logScrollY) } }
-        }
+        }.onFailure { media.unbind() }
     }
 
     private fun portrait(): ImageView = ImageView(context).apply {
@@ -260,6 +262,7 @@ class CompanionOverlay(private val context: Context) {
             runCatching { wm.updateViewLayout(root, lp) }
         }
         face?.visibility = View.VISIBLE
+        media.setVisible(true)
     }
 
     private fun updateChat() {
