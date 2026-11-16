@@ -35,7 +35,9 @@ class VaultActivity : Activity() {
         super.onCreate(savedInstanceState)
         settings = Settings(this)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 24) }
-        setContentView(ScrollView(this).apply { addView(root) })
+        val scroll = ScrollView(this).apply { addView(root) }
+        setContentView(scroll)
+        scroll.applyScreenInsets()
         root.addView(TextView(this).apply { text = "Obsidian vault"; textSize = 24f })
         status = TextView(this).apply { text = if (settings.vaultUri.isBlank()) "No vault selected" else "Vault selected. Search to refresh its index." }
         root.addView(status)
@@ -48,7 +50,7 @@ class VaultActivity : Activity() {
                     Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION), PICK_VAULT)
         }
         root.addView(TextView(this).apply {
-            text = "Choose the same folder you open in Obsidian. Notes, subfolders, text/code, Canvas, Office documents, and PDF text on Android 15+ are searchable. Images, audio, videos, scanned pages and unsupported files are searchable by filename only.\n\nSearch runs on this phone. During an agent task, matching excerpts may be sent to your configured Claude API. Files are reference data, never instructions to execute."
+            text = "Choose the same folder you open in Obsidian. Notes, subfolders, text/code, Canvas, Office documents, and PDF text on Android 15+ are searchable. Images, audio, videos, scanned pages and unsupported files are searchable by filename only.\n\nSearch runs on this phone. During an agent task, matching excerpts may be sent to your selected AI provider. Files are reference data, never instructions to execute."
             textSize = 13f
         })
         val query = EditText(this).apply { hint = "Search anything in the vault"; maxLines = 3 }

@@ -6,6 +6,12 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.BroadcastReceiver
+import android.os.PowerManager
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.*
+import android.content.res.Configuration
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -18,23 +24,22 @@ import com.ether4o4.odcm.control.CompanionOverlay
 class CompanionService : Service() {
 
     private var overlay: CompanionOverlay? = null
-    private val logListener: (List<String>) -> Unit = { lines ->
-        overlay?.setText(lines.takeLast(30).joinToString("\n").ifEmpty { "Idle. Give me a task." })
-        overlay?.setState(stateFrom(lines.lastOrNull().orEmpty()))
-    }
-
-    private fun stateFrom(line: String): String {
-        val l = line.lowercase()
-        return when {
-            "thinking" in l || "reading" in l || "working" in l || "waiting for approval" in l -> "thinking"
-            "reply:" in l || "done" in l -> "speaking"
-            "error" in l || "blocked" in l || "can't start" in l -> "error"
-            "ended" in l || "idle" in l -> "idle"
-            else -> "idle"
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var chatJob: Job? = null
+    private var receiverRegistered = false
+    private val logListener: (List<String>) -> Unit = { lines -> overlay?.setLogs(lines) }
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            overlay?.setScreenOn(getSystemService(PowerManager::class.java).isInteractive)
         }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        overlay?.refreshLayout()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { stop(); return START_NOT_STICKY }
@@ -44,18 +49,34 @@ class CompanionService : Service() {
 
         startForeground(NOTIF_ID, notification())
         val o = CompanionOverlay(this)
+        Conversation.initialize(this)
         o.onClose = { stop() }
+        o.onSend = { text ->
+            runCatching { AgentService.start(this, text); true }.getOrElse {
+                Conversation.notice("Could not start the request. Open ODCM and try again."); false
+            }
+        }
+        o.onStop = { AgentService.stopCurrent() }
+        o.onPause = { AgentService.togglePause() }
         o.show(CompanionOverlay.Mode.BOX)
         overlay = o
         instance = this
+        o.setScreenOn(getSystemService(PowerManager::class.java).isInteractive)
+        ContextCompat.registerReceiver(this, screenReceiver, IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_SCREEN_ON)
+        }, ContextCompat.RECEIVER_NOT_EXPORTED)
+        receiverRegistered = true
+        chatJob = scope.launch { Conversation.state.collect { o.setConversation(it) } }
         TaskLog.addListener(logListener)
         TaskLog.add("Companion ready.")
         return START_STICKY
     }
 
     private fun stop() {
+        chatJob?.cancel(); chatJob = null
+        if (receiverRegistered) { unregisterReceiver(screenReceiver); receiverRegistered = false }
         TaskLog.removeListener(logListener)
-        overlay?.hide()
+        overlay?.close()
         overlay = null
         if (instance === this) instance = null
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -63,10 +84,13 @@ class CompanionService : Service() {
     }
 
     override fun onDestroy() {
+        chatJob?.cancel(); chatJob = null
+        if (receiverRegistered) { unregisterReceiver(screenReceiver); receiverRegistered = false }
         TaskLog.removeListener(logListener)
-        overlay?.hide()
+        overlay?.close()
         overlay = null
         if (instance === this) instance = null
+        scope.cancel()
         super.onDestroy()
     }
 

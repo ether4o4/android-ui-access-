@@ -1,4 +1,4 @@
-# ODCM 0.2.0 phone verification
+# ODCM 0.3.0 phone verification
 
 Build checks are necessary but do not replace these checks on the S24 Ultra.
 Use a preview installed alongside the old build if signing certificates differ;
@@ -32,3 +32,28 @@ never uninstall an existing app merely to work around an update-signature error.
 9. Stop learning and tasks. Confirm the task notification and bar disappear,
    and no screen collection, network polling or microphone runs while idle.
 10. Run a 20-minute task/battery check before calling the build device-verified.
+
+## Companion chat and media
+
+11. In BOX mode, confirm the composer is at the bottom and no activity log or
+    log-expansion button is present. FULL has separate conversation and activity
+    history. Resize, rotate, minimize, reopen: confirm draft and conversation
+    survive and neither panel scrolls to the end while reading older text.
+12. Tap the composer, type using the Samsung keyboard, close the keyboard with
+    Back, and send a message. Confirm the composer stays visible, keyboard focus
+    returns to the underlying app after send, and the text is delivered once.
+13. Use the configured provider for a normal question. Confirm visible streamed
+    text, readable final reply, and useful follow-up context. Test a missing key,
+    offline endpoint, a stream interrupted halfway, Stop during streaming, and
+    reopening the companion. No partial response may cause a phone action.
+14. During a delayed phone decision or pending approval, send a correction.
+    Confirm the old action is skipped and the correction is considered. Pause,
+    send a message, and resume. Requests with tools unavailable should stay chat
+    only and explain that Accessibility enables phone tasks.
+15. Observe at least ten writing-loop cycles. Check for frame holds, black frames,
+    decoder restarts during incoming tokens/logs, and keyboard/rotation pauses.
+    The source changes camera framing; its boundary is intentionally blended.
+    Verify animation stops on Pause, idle, screen-off, and closing the companion.
+16. Confirm a source-linked vault answer from the new chat, including when
+    Accessibility is disabled. Check that the selected local/cloud provider is
+    still the one configured on the phone; no automatic model switching occurs.

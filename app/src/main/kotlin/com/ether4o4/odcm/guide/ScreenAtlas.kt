@@ -4,6 +4,9 @@ import com.ether4o4.odcm.core.ScreenIdentity
 import com.ether4o4.odcm.core.ScreenSnapshot
 import org.json.JSONObject
 import java.io.File
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Instant
 
 data class ScreenMap(val id: String, val path: String, val markdown: String, val known: Boolean, val changed: Boolean)
@@ -49,7 +52,13 @@ class ScreenAtlas(private val root: File) {
         val data = JSONObject().put("layout", layout).put("firstSeen", first).put("lastSeen", Instant.now().toString())
             .put("observations", visits).put("path", path).put("markdown", markdown)
         val tmp = File(root, "$id.tmp").apply { writeText(data.toString()) }
-        check(tmp.renameTo(file)) { "Cannot save screen key" }
+        // File.renameTo cannot replace an existing target on Windows. Keep the old key intact
+        // until the complete new observation is ready, then replace it in a single move.
+        try {
+            Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
         return ScreenMap(id, path, markdown, known, changed)
     }
 

@@ -1,5 +1,84 @@
 # ODCM — On-Device Control Module
 
+## Companion chat update: 0.3.0 (build 9)
+
+The source and bundled scenes for this update are on
+[`codex/companion-live-chat`](https://github.com/ether4o4/android-ui-access-/tree/codex/companion-live-chat).
+The [branch build](https://github.com/ether4o4/android-ui-access-/actions?query=branch%3Acodex%2Fcompanion-live-chat)
+produces an `ODCM-apks` artifact containing Debug, Preview, and Local Preview.
+CI-signed APKs may not update an existing locally signed installation. Build the
+matching variant on the same PC with its existing signing key to preserve data.
+
+### Earlier published builds
+
+- [Previously published ODCM Local Preview APK](https://github.com/ether4o4/android-ui-access-/releases/download/local-preview-latest/ODCM-local-preview.apk) · [release notes and checksums](https://github.com/ether4o4/android-ui-access-/releases/tag/local-preview-latest)
+- [Rolling development APK](https://github.com/ether4o4/android-ui-access-/releases/download/android-latest/ODCM-debug.apk) · [development release](https://github.com/ether4o4/android-ui-access-/releases/tag/android-latest)
+
+Local Preview uses `com.ether4o4.odcm.localpreview` and a persistent local signing
+key. It installs alongside the older Debug and GitHub Preview apps. Future Local
+Preview updates preserve its data with `adb install -r`; never uninstall another
+build to work around a signing conflict. Keep only the ODCM accessibility service
+you are using enabled. The rolling development build is a separate package and
+its CI debug signing key may differ between runs.
+
+## Companion and AI providers
+
+The medium window has the animated scene, a separate conversation, and a text
+composer anchored at the bottom. **Only the full window shows activity logs.**
+Draft text and conversation survive minimizing or changing window size. The
+keyboard is requested when the composer is tapped and released after sending;
+the panel adjusts when the keyboard is visible.
+
+Replies stream from the selected provider into chat. Follow-up messages sent
+while a phone task is running are consumed at decision boundaries: a new message
+invalidates a pending old action, including while approval is pending. Pause and
+Stop remain available. Without Accessibility, text chat and retrieved vault
+references work, but device-action tools are omitted. Completed chat is stored
+privately with bounded history; only recent conversation is used for continuity.
+Relevant conversation and vault excerpts go to the selected model provider.
+
+The supplied writing video is converted into a silent 5.5-second animated WebP
+with 132 frames at 24 fps and a blended boundary. It plays continuously while
+working. One retained decoder avoids restarting on chat/log updates or a video
+player seeking back to zero. It stops while idle, paused, screen-off, or closed.
+The supplied resting image (or the user's chosen avatar) is the idle scene.
+Talking and sleeping videos can be incorporated when supplied; live voice is
+not part of this change. See [scene provenance](art/companion/README.md).
+
+Select **AI provider**, enter its key when required, then tap **Save provider
+settings**. Model, endpoint and encrypted keys stay separate for each provider;
+existing Claude settings are preserved. Available presets are Anthropic, Groq,
+OpenRouter Free, Gemini, Hugging Face, local Ollama and a custom OpenAI-compatible
+endpoint. Both API protocols support sequential tool calls and cancellation.
+Malformed or multiple actions are rejected before any device action runs.
+
+- **Groq:** start with `openai/gpt-oss-20b` and a [Groq key](https://console.groq.com/keys). A free tier is available with account-specific limits.
+- **OpenRouter:** `openrouter/free` uses eligible free tool-capable models. Create an [OpenRouter key](https://openrouter.ai/settings/keys); multi-step tasks consume several requests. ODCM does not switch to a paid model automatically.
+- **Gemini:** the `gemini-4-hydrogen` preset has a free tier, subject to account availability and limits. Google's free-tier data terms may allow inputs to be used to improve products.
+- **Hugging Face:** supported as an optional provider; free accounts currently have no included Inference Providers credits.
+- **Ollama on this phone:** start the server in Termux (`phi` on the configured phone), select Local Ollama and model `phi4-mini`. The endpoint is `http://127.0.0.1:11434/v1/chat/completions`; no API key is required. Local model availability, speed and tool reliability depend on the installed model and device.
+
+Remote agent requests include screen text and selected vault passages. Local
+search and observation-only learning remain available without an API account.
+Remote endpoints require HTTPS; cleartext HTTP is limited to the phone's loopback
+addresses. Custom endpoints must implement chat completions with function tools.
+
+Provider references: [Groq tool support](https://console.groq.com/docs/tool-use/overview),
+[OpenRouter Free](https://openrouter.ai/openrouter/free),
+[Gemini compatibility](https://aistudio.google.com/docs/openai),
+[Gemini pricing](https://aistudio.google.com/docs/pricing),
+[Hugging Face pricing](https://huggingface.co/docs/inference-providers/pricing),
+[Ollama compatibility](https://docs.ollama.com/api/openai-compatibility).
+
+Build this PC's installable variant with Java 17 and Android SDK 35:
+
+```sh
+./gradlew :app:testDebugUnitTest :app:lintLocalPreview :app:assembleLocalPreview
+```
+
+Keep the local signing key private and backed up. CI does not publish or replace
+the locally signed rolling artifact; it must be built with the same signer.
+
 An Android assistant with on-device screen control, an Obsidian reference vault,
 and a growing guide to the controls it has actually seen. This branch adds the
 vault and screen-key foundation to the existing ODCM application.
@@ -7,8 +86,8 @@ vault and screen-key foundation to the existing ODCM application.
 ## Use it
 
 1. Install the APK and enable its accessibility service in Android settings.
-   The delivered **ODCM Preview** uses `com.ether4o4.odcm.preview` so it installs
-   alongside the previous debug build despite a different signing certificate.
+   The latest **ODCM Local Preview** uses `com.ether4o4.odcm.localpreview` so it
+   installs alongside the previous Debug and GitHub Preview builds.
    Select its vault and API key separately; keep only one ODCM service active.
 2. Open **Obsidian vault · search and import** and select the same folder you
    use in Obsidian. Search works locally without an API key.
@@ -23,7 +102,7 @@ vault and screen-key foundation to the existing ODCM application.
    app drawer, notification shade, quick settings, apps and websites. Stop or
    pause using the control bar. This observation-only session lasts up to
    15 minutes and needs no API key.
-6. For autonomous tasks, save your Claude API key, select autonomy and enter
+6. For autonomous tasks, select an AI provider and save its key if required, select autonomy and enter
    a task. Screen learning also runs automatically during every agent task.
 
 ## The growing screen key
@@ -78,7 +157,7 @@ Unsupported export schemas are reported for inspection.
 
 The agent has `search_vault` and paged `read_vault` tools and receives a few
 matching passages at task start. Source paths accompany retrieval results. Indexing
-and import are local; selected passages may be sent to the configured Claude API
+and import are local; selected passages may be sent to the selected AI provider
 when running an agent task. Historical content is reference data, not permission
 or executable instructions. Entering text in another app after reading the vault
 requires a per-task approval for that app.
@@ -106,10 +185,13 @@ ambiguous/stale controls and network cancellation. Test-only dependencies are
 Robolectric (MIT), MockWebServer (Apache-2.0), JUnit (EPL-1.0), and org.json
 (public domain); none are packaged into the APK. No new runtime library was added.
 
-On-device verification is still required for Samsung's file picker, permission
-persistence, live app layouts, PDFs, accessibility services, battery behavior
-and real Claude tasks. An API key and an attached/authorized phone were not
-available in the build environment. See [the phone checklist](docs/PHONE_CHECKLIST.md).
+The prior 0.2.1 build had on-phone checks for vault access/search and screen
+learning. Those results do not verify the new 0.3.0 chat UI. New regression tests
+cover streamed text/tool assembly, incomplete streams, cancellation, follow-up
+messages invalidating actions, compact/full log visibility, and composer drafts.
+Build, lint, and test reports are attached to the branch's GitHub Actions run.
+Keyboard behavior, provider accounts, animation frame pacing, and state changes
+still require the [phone checklist](docs/PHONE_CHECKLIST.md) on the target device.
 
 ## Scope and references
 

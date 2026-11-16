@@ -2,6 +2,7 @@ package com.ether4o4.odcm.guide
 
 import com.ether4o4.odcm.core.*
 import com.ether4o4.odcm.agent.TaskRunner
+import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -27,6 +28,18 @@ class ScreenAtlasTest {
         assertEquals(first.id, moved.id); assertTrue(moved.changed); assertNotEquals(first.path, moved.path)
         val rotated = atlas.observe(screen(el()).copy(width = 3120, height = 1440, rotation = 1))!!
         assertNotEquals(first.id, rotated.id); assertFalse(rotated.known)
+    }
+    @Test fun repeatedObservationsPersistCountAndLatestRevisionAcrossInstances() {
+        val first = ScreenAtlas(temp.root).observe(screen(el()))!!
+        ScreenAtlas(temp.root).observe(screen(el()))
+        val moved = ScreenAtlas(temp.root).observe(screen(el(x = 400)))!!
+        val saved = ScreenAtlas(temp.root).savedMaps().single()
+        val record = JSONObject(temp.root.resolve("${first.id}.json").readText())
+        assertEquals(3, record.getInt("observations"))
+        assertEquals(moved.path, saved.path)
+        assertEquals(moved.markdown, saved.markdown)
+        assertTrue(saved.markdown.contains("400, 100, 480, 160"))
+        assertFalse(temp.root.resolve("${first.id}.tmp").exists())
     }
     @Test fun editableValuesAndPasswordsAreNotWrittenIntoMaps() {
         val editable = el(label = "private value").copy(editable = true)

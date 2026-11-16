@@ -7,9 +7,23 @@ import com.ether4o4.odcm.core.AutonomyLevel
 class Settings(context: Context) {
     private val prefs = context.getSharedPreferences("odcm_settings", Context.MODE_PRIVATE)
 
+    var provider: ModelProvider
+        get() = ModelProvider.entries.firstOrNull { it.id == prefs.getString("provider", "anthropic") }
+            ?: ModelProvider.ANTHROPIC
+        set(v) = prefs.edit().putString("provider", v.id).apply()
+
     var model: String
-        get() = prefs.getString(KEY_MODEL, DEFAULT_MODEL)?.ifBlank { DEFAULT_MODEL } ?: DEFAULT_MODEL
-        set(v) = prefs.edit().putString(KEY_MODEL, v.trim()).apply()
+        get() {
+            val fallback = if (provider == ModelProvider.ANTHROPIC)
+                prefs.getString(KEY_MODEL, DEFAULT_MODEL) ?: DEFAULT_MODEL else provider.defaultModel
+            return prefs.getString("model_${provider.id}", fallback)?.ifBlank { fallback } ?: fallback
+        }
+        set(v) = prefs.edit().putString("model_${provider.id}", v.trim()).apply()
+
+    var endpoint: String
+        get() = prefs.getString("endpoint_${provider.id}", provider.defaultEndpoint)
+            ?.ifBlank { provider.defaultEndpoint } ?: provider.defaultEndpoint
+        set(v) = prefs.edit().putString("endpoint_${provider.id}", v.trim()).apply()
 
     var effort: String
         get() = prefs.getString(KEY_EFFORT, "low") ?: "low"

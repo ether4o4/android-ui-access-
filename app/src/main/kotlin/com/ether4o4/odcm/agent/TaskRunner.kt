@@ -22,13 +22,17 @@ class TaskRunner(
     private val guide: GuideStore? = null,
     private val vault: VaultRepository? = null,
     private val knowledge: ScreenKnowledge? = null,
+    private val messages: TaskMessages = TaskMessages(),
 ) {
     interface Callbacks {
         fun status(text: String)
         fun reply(text: String)
+        fun narration(text: String) = Unit
         suspend fun requestApproval(reason: String): Boolean
         fun settleDelayMs(): Long = 400
     }
+
+    fun addMessage(text: String): Boolean = !stopped && messages.offer(text)
 
     @Volatile private var stopped = false
     private val paused = MutableStateFlow(false)
@@ -63,6 +67,8 @@ class TaskRunner(
             limits.exceeded()?.let { callbacks.status("Stopped: $it"); return }
             awaitReady()
             if (stopped) break
+            for (message in messages.drain()) model.addUserText("User follow-up: $message")
+            val decisionRevision = messages.revision
             callbacks.status("Reading the screen…")
             val screen = control.readScreen()
             val map = try { runInterruptible(Dispatchers.IO) { knowledge?.observe(screen) } }
@@ -78,6 +84,10 @@ class TaskRunner(
             awaitReady() // Stop/pause during a network request must precede all tool execution.
             if (stopped) break
             limits.onStep()
+            if (messages.revision != decisionRevision) {
+                decision.toolUseId?.let { model.addToolResult(it, "Not executed: the user sent a new message. Reconsider using that follow-up.", true) }
+                continue
+            }
             if (decision.toolName == null) {
                 if (decision.plainText.isNotBlank()) { callbacks.reply(decision.plainText); callbacks.status("Done"); return }
                 limits.onResult(false)
@@ -87,6 +97,7 @@ class TaskRunner(
             val parsed = AgentAction.parse(decision.toolName, decision.toolArgs)
             if (parsed.isFailure) { fail(decision.toolUseId, parsed.exceptionOrNull()?.message.orEmpty()); continue }
             val action = parsed.getOrThrow()
+            if (decision.plainText.isNotBlank()) callbacks.narration(decision.plainText)
             when (action) {
                 is AgentAction.Reply -> { callbacks.reply(action.text); ok(decision.toolUseId, "Delivered to the requesting user."); continue }
                 is AgentAction.Done -> { callbacks.reply(action.summary); callbacks.status("Done: ${action.summary}"); return }
@@ -147,6 +158,10 @@ class TaskRunner(
             }
             awaitReady()
             if (stopped) break
+            if (messages.revision != decisionRevision) {
+                decision.toolUseId?.let { model.addToolResult(it, "Not executed: new user guidance arrived while waiting.", true) }
+                continue
+            }
             val latest = control.readScreen()
             actual = remapAction(actual, fresh, latest)
             if (actual == null || (policy.check(actual, latest, launchTarget?.packageName) is Verdict.Block)) {
