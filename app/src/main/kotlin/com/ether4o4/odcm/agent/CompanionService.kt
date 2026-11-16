@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -19,7 +20,7 @@ class CompanionService : Service() {
 
     private var overlay: CompanionOverlay? = null
     private val logListener: (List<String>) -> Unit = { lines ->
-        overlay?.setText(lines.takeLast(30).joinToString("\n").ifEmpty { "Idle. Give me a task." })
+        overlay?.setLogs(lines)
         overlay?.setState(stateFrom(lines.lastOrNull().orEmpty()))
     }
 
@@ -35,6 +36,11 @@ class CompanionService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        overlay?.refreshLayout()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { stop(); return START_NOT_STICKY }

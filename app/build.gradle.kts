@@ -11,8 +11,8 @@ android {
         applicationId = "com.ether4o4.odcm"
         minSdk = 30
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.2.0"
+        versionCode = 8
+        versionName = "0.2.1"
         manifestPlaceholders["appLabel"] = "ODCM"
     }
 
@@ -30,6 +30,13 @@ android {
             applicationIdSuffix = ".preview"
             versionNameSuffix = "-preview"
             manifestPlaceholders["appLabel"] = "ODCM Preview"
+            matchingFallbacks += listOf("debug")
+        }
+        create("localPreview") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".localpreview"
+            versionNameSuffix = "-local-preview"
+            manifestPlaceholders["appLabel"] = "ODCM Local Preview"
             matchingFallbacks += listOf("debug")
         }
     }

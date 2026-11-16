@@ -4,7 +4,7 @@ on:
   push:
     branches: [claude/android-messaging-bridge-9vsv90, main]
   pull_request:
-    branches: [claude/android-messaging-bridge-9vsv90, main]
+    branches: [claude/android-messaging-bridge-9vsv90, main, codex/obsidian-vault-reference]
   workflow_dispatch:
 
 permissions:
@@ -42,7 +42,7 @@ jobs:
         run: |
           set -e
           for attempt in 1 2 3; do
-            if ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:lintPreview :app:assemblePreview; then
+            if ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:lintPreview :app:assemblePreview :app:lintLocalPreview; then
               exit 0
             fi
             echo "Gradle attempt $attempt failed (often a transient Maven 429); retrying…"

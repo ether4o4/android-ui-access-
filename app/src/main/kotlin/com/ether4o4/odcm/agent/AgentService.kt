@@ -67,14 +67,15 @@ class AgentService : Service(), Overlay.Listener {
             return
         }
         val settings = Settings(this)
-        val apiKey = SecretStore(this).get(SecretStore.ANTHROPIC_KEY)
-        if (apiKey.isEmpty()) {
-            TaskLog.add("Can't start: no Claude API key saved. Add it and tap Save key.")
-            notify("Add your Claude API key in ODCM first.")
+        val provider = settings.provider
+        val apiKey = SecretStore(this).get(provider.keyName)
+        if (provider.requiresKey && apiKey.isEmpty()) {
+            TaskLog.add("Can't start: no ${provider.label} API key saved. Add it in provider settings.")
+            notify("Add your ${provider.label} API key in ODCM first.")
             finish()
             return
         }
-        TaskLog.add("Model ${settings.model}, autonomy ${settings.autonomy.name.lowercase()}. Working…")
+        TaskLog.add("${provider.label} · ${settings.model}, autonomy ${settings.autonomy.name.lowercase()}. Working…")
 
         val overlay = control.overlay
         overlay.listener = this
@@ -83,12 +84,18 @@ class AgentService : Service(), Overlay.Listener {
 
         replySink = { text -> Replies.send(this, replyTarget, text) }
 
-        val model = ModelClient(
+        val model = try { ModelClient(
             apiKey = apiKey,
             model = settings.model,
             effort = settings.effort,
             systemPrompt = Prompt.system(settings.autonomy, settings.rules),
-        )
+            provider = provider,
+            endpoint = settings.endpoint,
+        ) } catch (e: ModelException) {
+            TaskLog.add("Can't start: ${e.message ?: "invalid provider settings"}")
+            finish()
+            return
+        }
         val policy = TaskRunner.policyFor(settings.autonomy, settings.blockedList())
         // Legacy learned notes remain available; new references use the user-selected SAF tree.
         val guideRoot = File(getExternalFilesDir(null) ?: filesDir, "ODCM Guide")
