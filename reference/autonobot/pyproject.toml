@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autonobot"
+version = "1.0.0"
+description = "Autonomous Android phone agent via Telegram + Ollama"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+dependencies = [
+    "requests>=2.31.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+autonobot = "autonobot.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["autonobot*"]

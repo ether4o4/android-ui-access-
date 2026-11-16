@@ -1,0 +1,294 @@
+{
+  "tools": [
+    {
+      "name": "generate_lyrics",
+      "category": "composition",
+      "description": "Generate original lyrics for songs",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "theme": {
+            "type": "string",
+            "description": "Song theme or topic"
+          },
+          "genre": {
+            "type": "string",
+            "description": "Music genre (pop, rap, country, rock, etc)"
+          },
+          "mood": {
+            "type": "string",
+            "description": "Emotional mood (happy, sad, angry, romantic, etc)"
+          },
+          "sections": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Sections to generate (verse, chorus, bridge)"
+          },
+          "style_reference": {
+            "type": "string",
+            "description": "Artist or style to emulate (optional)"
+          }
+        },
+        "required": ["theme", "genre"]
+      }
+    },
+    {
+      "name": "chord_progression",
+      "category": "composition",
+      "description": "Generate chord progressions for songs",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Musical key (C, Cm, G, Dm, etc)"
+          },
+          "genre": {
+            "type": "string",
+            "description": "Genre for style-specific progressions"
+          },
+          "mood": {
+            "type": "string",
+            "description": "Mood to reflect in progression"
+          },
+          "length": {
+            "type": "integer",
+            "description": "Length in bars/measures"
+          }
+        },
+        "required": ["key"]
+      }
+    },
+    {
+      "name": "melody_composition",
+      "category": "composition",
+      "description": "Compose original melodies",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Musical key"
+          },
+          "scale": {
+            "type": "string",
+            "description": "Scale to use (major, minor, pentatonic, blues)"
+          },
+          "length": {
+            "type": "integer",
+            "description": "Length in bars"
+          },
+          "mood": {
+            "type": "string",
+            "description": "Emotional character"
+          }
+        },
+        "required": ["key"]
+      }
+    },
+    {
+      "name": "song_structure",
+      "category": "composition",
+      "description": "Design song arrangement and structure",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "genre": {
+            "type": "string",
+            "description": "Music genre"
+          },
+          "length": {
+            "type": "integer",
+            "description": "Desired song length in seconds"
+          },
+          "sections": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Sections (intro, verse, chorus, bridge, outro)"
+          }
+        },
+        "required": ["genre"]
+      }
+    },
+    {
+      "name": "genre_writer",
+      "category": "composition",
+      "description": "Write in genre-specific style",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "genre": {
+            "type": "string",
+            "description": "Target genre"
+          },
+          "content_type": {
+            "type": "string",
+            "enum": ["lyrics", "chords", "melody", "hook"],
+            "description": "What to generate"
+          },
+          "theme": {
+            "type": "string",
+            "description": "Theme or topic"
+          }
+        },
+        "required": ["genre", "content_type"]
+      }
+    },
+    {
+      "name": "analyze_lyrics",
+      "category": "analysis",
+      "description": "Analyze and critique lyrics",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "lyrics": {
+            "type": "string",
+            "description": "Lyrics to analyze"
+          },
+          "analysis_type": {
+            "type": "string",
+            "enum": ["quality", "rhyme", "flow", "emotion", "commercial"],
+            "description": "Type of analysis"
+          }
+        },
+        "required": ["lyrics"]
+      }
+    },
+    {
+      "name": "rhyme_generator",
+      "category": "tools",
+      "description": "Generate rhyming words and phrases",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "word": {
+            "type": "string",
+            "description": "Word to find rhymes for"
+          },
+          "rhyme_type": {
+            "type": "string",
+            "enum": ["perfect", "slant", "internal"],
+            "description": "Type of rhyme"
+          },
+          "count": {
+            "type": "integer",
+            "description": "Number of rhymes to generate"
+          }
+        },
+        "required": ["word"]
+      }
+    },
+    {
+      "name": "music_theory_helper",
+      "category": "theory",
+      "description": "Apply music theory to songwriting",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "description": "Music theory topic"
+          },
+          "context": {
+            "type": "string",
+            "description": "Song context or question"
+          }
+        },
+        "required": ["topic"]
+      }
+    },
+    {
+      "name": "song_feedback",
+      "category": "analysis",
+      "description": "Get professional songwriting feedback",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "lyrics": {
+            "type": "string",
+            "description": "Lyrics for feedback"
+          },
+          "focus_areas": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Areas to focus on (lyrics, structure, flow, emotion)"
+          }
+        },
+        "required": ["lyrics"]
+      }
+    },
+    {
+      "name": "melody_matcher",
+      "category": "composition",
+      "description": "Match melody to lyrics or chords",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "lyrics": {
+            "type": "string",
+            "description": "Lyrics to set to melody"
+          },
+          "chords": {
+            "type": "string",
+            "description": "Chord progression (optional)"
+          }
+        },
+        "required": ["lyrics"]
+      }
+    },
+    {
+      "name": "arrangement_suggester",
+      "category": "composition",
+      "description": "Suggest arrangements and instrumentation",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "song_info": {
+            "type": "string",
+            "description": "Song description or theme"
+          },
+          "genre": {
+            "type": "string",
+            "description": "Music genre"
+          },
+          "mood": {
+            "type": "string",
+            "description": "Song mood"
+          }
+        },
+        "required": ["genre"]
+      }
+    },
+    {
+      "name": "lyric_variations",
+      "category": "composition",
+      "description": "Generate alternative lyric versions",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "original_lyrics": {
+            "type": "string",
+            "description": "Original lyrics"
+          },
+          "variation_type": {
+            "type": "string",
+            "description": "Type of variation (rhyme, style, tone, simplify)"
+          }
+        },
+        "required": ["original_lyrics"]
+      }
+    }
+  ]
+}

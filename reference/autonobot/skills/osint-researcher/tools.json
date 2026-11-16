@@ -1,0 +1,283 @@
+{
+  "tools": [
+    {
+      "name": "whois_lookup",
+      "category": "reconnaissance",
+      "description": "Perform Whois lookup on domain or IP address",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "Domain name or IP address"
+          }
+        },
+        "required": ["target"]
+      }
+    },
+    {
+      "name": "dns_enumeration",
+      "category": "reconnaissance",
+      "description": "Enumerate DNS records and discover subdomains",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Domain to enumerate"
+          },
+          "record_types": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "DNS record types (A, MX, TXT, CNAME, NS, SOA)"
+          }
+        },
+        "required": ["domain"]
+      }
+    },
+    {
+      "name": "email_finder",
+      "category": "reconnaissance",
+      "description": "Find email addresses associated with a domain",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Domain to search"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum results"
+          }
+        },
+        "required": ["domain"]
+      }
+    },
+    {
+      "name": "email_verification",
+      "category": "reconnaissance",
+      "description": "Verify if email address is valid",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Email address to verify"
+          }
+        },
+        "required": ["email"]
+      }
+    },
+    {
+      "name": "breach_check",
+      "category": "threat_intelligence",
+      "description": "Check if email/domain was in known data breaches",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Email address or domain to check"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "social_media_search",
+      "category": "profiling",
+      "description": "Search and profile social media accounts",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "Username to search"
+          },
+          "platforms": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Platforms to search (twitter, linkedin, github, reddit, etc)"
+          }
+        },
+        "required": ["username"]
+      }
+    },
+    {
+      "name": "username_search",
+      "category": "profiling",
+      "description": "Find all accounts with specific username across internet",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "Username to search"
+          }
+        },
+        "required": ["username"]
+      }
+    },
+    {
+      "name": "public_records_search",
+      "category": "reconnaissance",
+      "description": "Search public business and property records",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Business name, person name, or address"
+          },
+          "state": {
+            "type": "string",
+            "description": "State/region (optional)"
+          },
+          "record_type": {
+            "type": "string",
+            "enum": ["business", "property", "court", "regulatory"],
+            "description": "Type of record"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "network_mapper",
+      "category": "infrastructure",
+      "description": "Map network infrastructure and identify hosts",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "Domain or IP to map"
+          }
+        },
+        "required": ["target"]
+      }
+    },
+    {
+      "name": "port_scanner",
+      "category": "infrastructure",
+      "description": "Passive port and service detection",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "IP address or domain"
+          }
+        },
+        "required": ["target"]
+      }
+    },
+    {
+      "name": "cve_lookup",
+      "category": "threat_intelligence",
+      "description": "Search CVE database for vulnerabilities",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Software/version or CVE ID"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "threat_intel",
+      "category": "threat_intelligence",
+      "description": "Gather threat intelligence on domain or IP",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "Domain or IP address"
+          }
+        },
+        "required": ["target"]
+      }
+    },
+    {
+      "name": "reverse_image_search",
+      "category": "reconnaissance",
+      "description": "Find source and similar images",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "image_path": {
+            "type": "string",
+            "description": "Path to image file"
+          }
+        },
+        "required": ["image_path"]
+      }
+    },
+    {
+      "name": "metadata_extractor",
+      "category": "reconnaissance",
+      "description": "Extract metadata from files and images",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Path to file (image, PDF, doc, etc)"
+          }
+        },
+        "required": ["file_path"]
+      }
+    },
+    {
+      "name": "api_discovery",
+      "category": "infrastructure",
+      "description": "Discover exposed APIs and endpoints",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "Domain or company name"
+          }
+        },
+        "required": ["target"]
+      }
+    },
+    {
+      "name": "geolocation",
+      "category": "reconnaissance",
+      "description": "Geolocate IP addresses or images",
+      "enabled": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "IP address or image path"
+          }
+        },
+        "required": ["target"]
+      }
+    }
+  ]
+}

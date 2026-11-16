@@ -1,0 +1,48 @@
+{
+  "safety_system": {
+    "version": "1.0",
+    "dangerous_operations": {
+      "file_deletion": {
+        "patterns": ["rm -rf", "rm ", "rmdir", "unlink", "shred"],
+        "tools": ["delete_file"],
+        "requires_approval": true,
+        "severity": "critical"
+      },
+      "financial": {
+        "patterns": ["transfer", "payment", "send money", "withdraw", "deposit", "bank", "paypal", "venmo", "zelle"],
+        "requires_approval": true,
+        "severity": "critical"
+      },
+      "cryptocurrency": {
+        "patterns": ["bitcoin", "ethereum", "crypto", "wallet send", "btc", "eth", "usdt"],
+        "requires_approval": true,
+        "severity": "critical"
+      },
+      "system_config": {
+        "patterns": ["sudo", "su -", "chmod 777", "reboot", "shutdown", "factory_reset", "format"],
+        "requires_approval": true,
+        "severity": "high"
+      },
+      "root_access": {
+        "patterns": ["su ", "sudo ", "adb root"],
+        "requires_approval": true,
+        "severity": "critical"
+      },
+      "account_delete": {
+        "patterns": ["delete account", "close account", "deactivate", "unsubscribe all"],
+        "requires_approval": true,
+        "severity": "high"
+      },
+      "mass_communication": {
+        "threshold": 10,
+        "requires_approval": true,
+        "severity": "medium"
+      }
+    },
+    "approval": {
+      "timeout_seconds": 60,
+      "retry_attempts": 3,
+      "confirmation_text": ["YES", "confirm", "approved"]
+    }
+  }
+}

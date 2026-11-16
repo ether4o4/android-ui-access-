@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ODCM</string>
+    <string name="accessibility_description">Lets ODCM read the current screen and tap, type and swipe to carry out tasks you give it. Off until you turn it on.</string>
+</resources>
