@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.ether4o4.odcm.core.AgentAction
+import com.ether4o4.odcm.core.TaskControl
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -14,7 +15,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * The hands and eyes. Runs in the app's own process, so the agent calls these methods directly:
  * no cross-process broadcast, nothing exported, and no work while idle.
  */
-class ControlService : AccessibilityService() {
+class ControlService : AccessibilityService(), TaskControl {
 
     private val reader = ScreenReader()
     @Volatile private var lastRead: ScreenReader.Result? = null
@@ -38,7 +39,7 @@ class ControlService : AccessibilityService() {
         super.onDestroy()
     }
 
-    fun readScreen(): com.ether4o4.odcm.core.ScreenSnapshot {
+    override fun readScreen(): com.ether4o4.odcm.core.ScreenSnapshot {
         val metrics = resources.displayMetrics
         val result = reader.read(rootInActiveWindow, metrics.widthPixels, metrics.heightPixels, packageName)
         lastRead = result
@@ -47,8 +48,8 @@ class ControlService : AccessibilityService() {
 
     private fun nodeAt(index: Int): AccessibilityNodeInfo? = lastRead?.nodes?.getOrNull(index)
 
-    /** Performs an action and reports plainly whether it took effect. */
-    suspend fun perform(action: AgentAction): Boolean = when (action) {
+    /** Reports dispatch acceptance; the runner separately observes the resulting screen. */
+    override suspend fun perform(action: AgentAction): Boolean = when (action) {
         is AgentAction.Tap -> {
             val node = nodeAt(action.index) ?: return false
             val el = lastRead?.snapshot?.elements?.getOrNull(action.index)

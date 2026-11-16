@@ -18,7 +18,8 @@ object Tools {
                 obj("direction" to str("up, down, left or right")), listOf("direction")))
             put(tool("back", "Press the system Back button.", JSONObject(), emptyList()))
             put(tool("home", "Go to the home screen.", JSONObject(), emptyList()))
-            put(tool("open_app", "Open an app by name.", obj("name" to str("app name, e.g. Gmail")), listOf("name")))
+            put(tool("open_app", "Open an installed app by exact package or unambiguous name.",
+                obj("name" to str("installed package from app context, or app name, e.g. Gmail")), listOf("name")))
             put(tool("wait", "Wait briefly for the screen to settle.", obj("ms" to int("milliseconds, up to 5000")), listOf("ms")))
             put(tool("reply", "Send a message back to the person who gave the task.", obj("text" to str("the reply")), listOf("text")))
             put(tool("done", "The task is finished.", obj("summary" to str("one-line result")), listOf("summary")))

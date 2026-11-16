@@ -15,12 +15,14 @@ import com.ether4o4.odcm.data.Settings
 import com.ether4o4.odcm.guide.GuideStore
 import java.io.File
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Short-lived foreground service that owns one task. It starts when a task arrives and stops itself
@@ -28,7 +30,8 @@ import kotlinx.coroutines.launch
  */
 class AgentService : Service(), Overlay.Listener {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // Service ownership and cleanup are serialized with Android lifecycle callbacks.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var job: Job? = null
     private var runner: TaskRunner? = null
     private var pendingApproval: CompletableDeferred<Boolean>? = null
@@ -47,7 +50,7 @@ class AgentService : Service(), Overlay.Listener {
     }
 
     private fun startTask(task: String, replyTarget: String?) {
-        if (job?.isActive == true) { TaskLog.add("Busy with another task; ignored: $task"); return }
+        if (job?.isCompleted == false) { TaskLog.add("Busy with another task; ignored: $task"); return }
         TaskLog.add("Task: $task")
         val control = ControlService.get()
         if (control == null) {
@@ -90,21 +93,31 @@ class AgentService : Service(), Overlay.Listener {
             callbacks = object : TaskRunner.Callbacks {
                 override fun status(text: String) { overlay.status(text); notify(text); TaskLog.add(text) }
                 override fun reply(text: String) { TaskLog.add("Reply: $text"); replySink?.invoke(text) }
-                override suspend fun requestApproval(reason: String): Boolean {
+                override suspend fun requestApproval(reason: String): Boolean = withContext(Dispatchers.Main.immediate) {
                     val d = CompletableDeferred<Boolean>()
                     pendingApproval = d
                     overlay.askApproval(reason)
-                    val answer = d.await()
-                    overlay.clearApproval()
-                    return answer
+                    try {
+                        d.await()
+                    } finally {
+                        if (pendingApproval === d) pendingApproval = null
+                        overlay.clearApproval()
+                    }
                 }
             },
         )
         runner = r
         job = scope.launch {
-            runCatching { r.run(task) }.onFailure { TaskLog.add("Error: ${it.message ?: it.javaClass.simpleName}") }
-            TaskLog.add("Task ended.")
-            finish()
+            try {
+                withContext(Dispatchers.Default) { r.run(task) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                TaskLog.add("Error: ${e.message ?: e.javaClass.simpleName}")
+            } finally {
+                TaskLog.add("Task ended.")
+                if (runner === r) finish()
+            }
         }
     }
 
@@ -121,8 +134,12 @@ class AgentService : Service(), Overlay.Listener {
     private var pausedFlag = false
 
     private fun finish() {
+        runner?.stop()
         pendingApproval?.complete(false)
+        pendingApproval = null
         job?.cancel()
+        pausedFlag = false
+        ControlService.get()?.overlay?.listener = null
         ControlService.get()?.overlay?.hide()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
