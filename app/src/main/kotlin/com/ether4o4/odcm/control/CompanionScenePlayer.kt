@@ -10,6 +10,7 @@ internal class CompanionScenePlayer {
     private var scene: Drawable? = null
     private var screenOn = true
     private var visible = true
+    private var focusX = .5f
 
     fun bind(target: ImageView) {
         if (image !== target) image?.setImageDrawable(null)
@@ -17,7 +18,8 @@ internal class CompanionScenePlayer {
         display()
     }
 
-    fun show(drawable: Drawable?) {
+    fun show(drawable: Drawable?, focalX: Float = .5f) {
+        focusX = focalX
         if (scene !== drawable) (scene as? Animatable)?.stop()
         scene = drawable
         display()
@@ -27,7 +29,10 @@ internal class CompanionScenePlayer {
     fun setVisible(value: Boolean) { visible = value; display() }
 
     private fun display() {
-        image?.let { if (it.drawable !== scene) it.setImageDrawable(scene) }
+        image?.let {
+            (it as? AvatarView)?.focusX = focusX
+            if (it.drawable !== scene) it.setImageDrawable(scene)
+        }
         val animation = scene as? Animatable ?: return
         if (image != null && screenOn && visible) {
             if (!animation.isRunning) animation.start()

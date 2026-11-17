@@ -46,7 +46,9 @@ class AgentService : Service(), Overlay.Listener {
     @Volatile private var generation = 0
     private var learningEvents: Channel<Unit>? = null
     private var chatMessages = TaskMessages()
-    private val deferredTasks = ArrayDeque<Pair<String, String?>>()
+    private data class DeferredTask(val text: String, val target: String?, val voice: Boolean)
+    private val deferredTasks = ArrayDeque<DeferredTask>()
+    private var speakResponses = false
     private var pauseWaiter: CompletableDeferred<Unit>? = null
 
     override fun onCreate() {
@@ -64,21 +66,22 @@ class AgentService : Service(), Overlay.Listener {
 
         startForeground(NOTIF_ID, notification("ODCM is working"))
         if (intent.getBooleanExtra(EXTRA_LEARN, false)) { startLearning(); return START_NOT_STICKY }
-        startTask(task, replyTarget = intent.getStringExtra(EXTRA_REPLY_KEY))
+        startTask(task, replyTarget = intent.getStringExtra(EXTRA_REPLY_KEY), speakReply = intent.getBooleanExtra(EXTRA_SPEAK_REPLY, false))
         return START_NOT_STICKY
     }
 
-    private fun startTask(task: String, replyTarget: String?) {
+    private fun startTask(task: String, replyTarget: String?, speakReply: Boolean = false) {
         if (task.length > 4000) { Conversation.notice("Keep messages under 4,000 characters."); return }
         if (job?.isCompleted == false) {
             if (runner == null && learningEvents == null && RequestRoute.phone(task)) {
-                if (deferredTasks.size < 8) { deferredTasks.addLast(task to replyTarget); Conversation.notice("Phone task queued after this reply.") }
+                if (deferredTasks.size < 8) { deferredTasks.addLast(DeferredTask(task, replyTarget, speakReply)); Conversation.notice("Phone task queued after this reply.") }
                 else Conversation.notice("Too many queued tasks. Wait for the current reply.")
                 return
             }
             val accepted = replyTarget == null && learningEvents == null &&
                 (runner?.addMessage(task) ?: chatMessages.offer(task))
             if (accepted) {
+                if (speakReply) speakResponses = true
                 Conversation.user(task)
                 Conversation.status(if (pausedFlag) "Message queued · resume when ready" else "New message received")
                 // A pending decision needs reconsideration, not approval for its old intent.
@@ -86,6 +89,7 @@ class AgentService : Service(), Overlay.Listener {
             } else Conversation.notice("Finish or stop the current session before sending another message.")
             return
         }
+        speakResponses = speakReply && replyTarget == null
         val recent = Conversation.context(task)
         Conversation.user(task)
         Conversation.begin()
@@ -101,6 +105,7 @@ class AgentService : Service(), Overlay.Listener {
             val message = "Add your ${provider.label} API key in ODCM provider settings first."
             TaskLog.add("Can't start: $message")
             Conversation.notice(message)
+            if (speakResponses) CompanionService.speakReply(message)
             notify(message)
             finish()
             return
@@ -128,6 +133,7 @@ class AgentService : Service(), Overlay.Listener {
             onStatus = { status -> if (generation == taskGeneration) { Conversation.status(status); TaskLog.add(status) } },
         ) } catch (e: ModelException) {
             Conversation.notice(e.message ?: "Check provider settings.")
+            if (speakResponses) CompanionService.speakReply(e.message ?: "Check provider settings.")
             TaskLog.add("Can't start: ${e.message ?: "invalid provider settings"}")
             finish()
             return
@@ -181,7 +187,9 @@ class AgentService : Service(), Overlay.Listener {
                 throw e
             } catch (e: Exception) {
                 outcome = "failed"
-                Conversation.notice((e as? ModelException)?.message ?: "The request could not be completed. Check the activity log.")
+                val message = (e as? ModelException)?.message ?: "The request could not be completed. Check the activity log."
+                Conversation.notice(message)
+                if (speakResponses) CompanionService.speakReply(message)
                 TaskLog.add("Error: ${e.message ?: e.javaClass.simpleName}")
             } finally {
                 vault?.close()
@@ -199,7 +207,7 @@ class AgentService : Service(), Overlay.Listener {
                     finish()
                     // Start on the next main-loop turn, after this task has released its model and vault.
                     if (pending.isNotEmpty()) android.os.Handler(mainLooper).post {
-                        pending.forEach { (text, target) -> start(this@AgentService, text, target) }
+                        pending.forEach { (text, target, voice) -> start(this@AgentService, text, target, voice) }
                     }
                 }
             }
@@ -208,6 +216,7 @@ class AgentService : Service(), Overlay.Listener {
 
     private fun deliverReply(text: String) {
         Conversation.reply(text)
+        if (speakResponses) CompanionService.speakReply(text)
         TaskLog.add("Reply: $text")
         replySink?.invoke(text)
     }
@@ -280,7 +289,7 @@ class AgentService : Service(), Overlay.Listener {
         }
     }
 
-    override fun onStop() { deferredTasks.clear(); Conversation.notice("Stopped."); runner?.stop(); finish() }
+    override fun onStop() { CompanionService.stopSpeech(); deferredTasks.clear(); Conversation.notice("Stopped."); runner?.stop(); finish() }
 
     override fun onPauseToggle() {
         val r = runner
@@ -355,15 +364,17 @@ class AgentService : Service(), Overlay.Listener {
         fun togglePause() { instance?.onPauseToggle() }
         const val EXTRA_TASK = "task"
         const val EXTRA_REPLY_KEY = "reply_key"
+        const val EXTRA_SPEAK_REPLY = "speak_reply"
         private const val EXTRA_LEARN = "learn_screens"
         const val ACTION_STOP = "com.ether4o4.odcm.STOP"
         private const val CHANNEL = "odcm_task"
         private const val NOTIF_ID = 42
 
-        fun start(context: Context, task: String, replyKey: String? = null) {
+        fun start(context: Context, task: String, replyKey: String? = null, speakReply: Boolean = false) {
             val intent = Intent(context, AgentService::class.java)
                 .putExtra(EXTRA_TASK, task)
                 .putExtra(EXTRA_REPLY_KEY, replyKey)
+                .putExtra(EXTRA_SPEAK_REPLY, speakReply)
             context.startForegroundService(intent)
         }
         fun learn(context: Context) {

@@ -79,7 +79,8 @@ class CompanionOverlayTest {
             val children = views(panel)
             assertTrue(children.filterIsInstance<TextView>().any { "Hi Capo" in it.text.toString() })
             assertFalse(children.filterIsInstance<TextView>().any { "DIAGNOSTIC-ONLY" in it.text.toString() || "Activity log" == it.text.toString() })
-            assertTrue(views(panel.getChildAt(panel.childCount - 1)).any { it is EditText })
+            assertEquals(View.GONE, children.single { it.contentDescription == "Companion text drawer" }.visibility)
+            assertTrue(children.any { it.contentDescription == "Start voice conversation" })
             overlay.close()
         }
     }
@@ -154,6 +155,7 @@ class CompanionOverlayTest {
                 val panel = root(overlay)
                 val lp = panel.layoutParams as WindowManager.LayoutParams
                 val saved = listOf(lp.x, lp.y, lp.width, lp.height)
+                views(panel).single { it.contentDescription == "Show conversation and keyboard" }.performClick()
                 val edit = views(panel).filterIsInstance<EditText>().single()
                 edit.setText("Keep typing here")
                 touch(edit, MotionEvent.ACTION_DOWN)
@@ -171,6 +173,74 @@ class CompanionOverlayTest {
                 assertEquals(0, lp.flags and WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
                 panel.dispatchApplyWindowInsets(android.view.WindowInsets.Builder().setVisible(android.view.WindowInsets.Type.ime(), false).build())
                 assertEquals(saved, listOf(lp.x, lp.y, lp.width, lp.height))
+            } finally { overlay.close() }
+        }
+    }
+
+    @Test @Config(qualifiers = "w411dp-h891dp-mdpi")
+    fun avatarFillsSmallPanelAndDrawerTogglesWithoutLosingDraftOrGeometry() {
+        Robolectric.buildActivity(Activity::class.java).setup().use { controller ->
+            val activity = controller.get()
+            activity.getSharedPreferences("companion_geometry", 0).edit().clear().commit()
+            val overlay = CompanionOverlay(activity)
+            try {
+                overlay.show()
+                val panel = root(overlay)
+                val grip = views(panel).single { it.contentDescription == "Resize companion" }
+                touch(grip, MotionEvent.ACTION_DOWN)
+                touch(grip, MotionEvent.ACTION_MOVE, 20f, -220f)
+                touch(grip, MotionEvent.ACTION_UP, 20f, -220f)
+                val lp = panel.layoutParams as WindowManager.LayoutParams
+                val saved = listOf(lp.x, lp.y, lp.width, lp.height)
+                panel.measure(View.MeasureSpec.makeMeasureSpec(lp.width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(lp.height, View.MeasureSpec.EXACTLY))
+                panel.layout(0, 0, lp.width, lp.height)
+                val scene = views(panel).single { it.contentDescription == "Companion scene" }
+                assertEquals(View.VISIBLE, scene.visibility)
+                assertEquals(panel.width, scene.width); assertEquals(panel.height, scene.height)
+                val drawer = views(panel).single { it.contentDescription == "Companion text drawer" }
+                assertEquals(View.GONE, drawer.visibility)
+                views(panel).single { it.contentDescription == "Show conversation and keyboard" }.performClick()
+                assertEquals(View.VISIBLE, drawer.visibility)
+                val edit = views(panel).filterIsInstance<EditText>().single()
+                edit.setText("My unsent draft")
+                views(panel).single { it.contentDescription == "Hide conversation and keyboard" }.performClick()
+                assertEquals(View.GONE, drawer.visibility)
+                views(panel).single { it.contentDescription == "Show conversation and keyboard" }.performClick()
+                assertEquals("My unsent draft", edit.text.toString())
+                assertEquals(saved, listOf(lp.x, lp.y, lp.width, lp.height))
+                var micTaps = 0
+                overlay.onMic = { micTaps++ }
+                views(panel).single { it.contentDescription == "Start voice conversation" }.performClick()
+                assertEquals(1, micTaps)
+            } finally { overlay.close() }
+        }
+    }
+
+    @Test @Config(qualifiers = "w891dp-h411dp-land-mdpi")
+    fun landscapeKeyboardLeavesTheTypedLineInsideTheDrawer() {
+        Robolectric.buildActivity(Activity::class.java).setup().use { c ->
+            c.get().getSharedPreferences("companion_geometry", 0).edit().clear().commit()
+            val overlay = CompanionOverlay(c.get())
+            try {
+                overlay.show()
+                val panel = root(overlay)
+                views(panel).single { it.contentDescription == "Show conversation and keyboard" }.performClick()
+                val edit = views(panel).filterIsInstance<EditText>().single()
+                edit.setText("first line\nsecond line\nthird line")
+                touch(edit, MotionEvent.ACTION_DOWN)
+                panel.dispatchApplyWindowInsets(android.view.WindowInsets.Builder()
+                    .setInsets(android.view.WindowInsets.Type.ime(), android.graphics.Insets.of(0, 0, 0, 240))
+                    .setVisible(android.view.WindowInsets.Type.ime(), true).build())
+                val lp = panel.layoutParams as WindowManager.LayoutParams
+                panel.measure(View.MeasureSpec.makeMeasureSpec(lp.width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(lp.height, View.MeasureSpec.EXACTLY))
+                panel.layout(0, 0, lp.width, lp.height)
+                val composer = edit.parent as View
+                val drawer = composer.parent as View
+                assertEquals(1, edit.maxLines)
+                assertTrue(edit.height > 0)
+                assertTrue(composer.bottom <= drawer.height)
+                assertTrue(drawer.bottom <= panel.height)
+                assertEquals(View.VISIBLE, views(panel).single { it.contentDescription == "Companion scene" }.visibility)
             } finally { overlay.close() }
         }
     }

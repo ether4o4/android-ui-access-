@@ -211,9 +211,14 @@ class MainActivity : Activity() {
                 startActivity(Intent(AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             } else {
                 CompanionService.start(this)
-                toast("Companion shown — drag it, tap ⤢/—/✕ to resize or close")
+                toast("Companion shown — mic to speak, ▾ for chat, ◢ to resize")
             }
         })
+        root.addView(button("Android voice settings") {
+            runCatching { startActivity(Intent("com.android.settings.TTS_SETTINGS")) }
+                .onFailure { toast("Open Android Settings → Text-to-speech output") }
+        })
+        root.addView(hint("Select your installed offline TTS engine and Heart voice in Android settings. Tap the companion mic for each spoken turn; final replies are read aloud. Recognition prefers on-device support; the system fallback may use the network. No voice endpoint or API key is needed."))
         root.addView(button("Hide companion") { CompanionService.stop(this) })
         root.addView(button("Choose companion image") {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
@@ -222,7 +227,7 @@ class MainActivity : Activity() {
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
             startActivityForResult(intent, REQ_PICK_IMAGE)
         })
-        root.addView(hint("Pick any image (PNG/JPG, or an animated GIF/WebP) for the face. Drag the title to move; drag the bottom-right grip to resize. Position and size are remembered. ⤢ logs, — bubble, ✕ close."))
+        root.addView(hint("The avatar fills the panel at every size (edges crop to fit). Drag the top handle to move and ◢ to resize. ▾ opens chat and typing; ▴ hides all conversation text. Expand then open chat for logs. 🎤 speaks, ■ stops task/speech, — minimizes, ✕ closes."))
 
         root.addView(divider())
         root.addView(label("Try a task"))
