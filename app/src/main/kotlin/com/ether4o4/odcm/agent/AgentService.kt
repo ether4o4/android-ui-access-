@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
+import com.ether4o4.odcm.voice.LiveVoiceService
 import com.ether4o4.odcm.control.ControlService
 import com.ether4o4.odcm.control.Overlay
 import com.ether4o4.odcm.data.SecretStore
@@ -49,6 +50,7 @@ class AgentService : Service(), Overlay.Listener {
     private data class DeferredTask(val text: String, val target: String?, val voice: Boolean)
     private val deferredTasks = ArrayDeque<DeferredTask>()
     private var speakResponses = false
+    private var voiceTurn: String? = null
     private var pauseWaiter: CompletableDeferred<Unit>? = null
 
     override fun onCreate() {
@@ -63,14 +65,25 @@ class AgentService : Service(), Overlay.Listener {
         val task = intent?.getStringExtra(EXTRA_TASK)?.trim()
         if (intent?.action == ACTION_STOP) { onStop(); return START_NOT_STICKY }
         if (task.isNullOrEmpty()) { finish(); return START_NOT_STICKY }
+        val liveTurn = intent.getStringExtra(EXTRA_VOICE_TURN)
+        if (liveTurn != null && !LiveVoiceService.ownsTurn(liveTurn)) {
+            if (job?.isCompleted != false) stopSelf()
+            return START_NOT_STICKY
+        }
 
         startForeground(NOTIF_ID, notification("ODCM is working"))
         if (intent.getBooleanExtra(EXTRA_LEARN, false)) { startLearning(); return START_NOT_STICKY }
-        startTask(task, replyTarget = intent.getStringExtra(EXTRA_REPLY_KEY), speakReply = intent.getBooleanExtra(EXTRA_SPEAK_REPLY, false))
+        startTask(task, replyTarget = intent.getStringExtra(EXTRA_REPLY_KEY), speakReply = intent.getBooleanExtra(EXTRA_SPEAK_REPLY, false), liveTurn = intent.getStringExtra(EXTRA_VOICE_TURN))
         return START_NOT_STICKY
     }
 
-    private fun startTask(task: String, replyTarget: String?, speakReply: Boolean = false) {
+    private fun startTask(task: String, replyTarget: String?, speakReply: Boolean = false, liveTurn: String? = null) {
+        // A live utterance owns one complete task. Never attach it to a different in-flight task.
+        if (liveTurn != null && (job?.isCompleted == false || task.length > 4000)) {
+            LiveVoiceService.stop()
+            Conversation.notice("Finish or stop the current task, then tap the mic again.")
+            return
+        }
         if (task.length > 4000) { Conversation.notice("Keep messages under 4,000 characters."); return }
         if (job?.isCompleted == false) {
             if (runner == null && learningEvents == null && RequestRoute.phone(task)) {
@@ -89,6 +102,7 @@ class AgentService : Service(), Overlay.Listener {
             } else Conversation.notice("Finish or stop the current session before sending another message.")
             return
         }
+        voiceTurn = liveTurn
         speakResponses = speakReply && replyTarget == null
         val recent = Conversation.context(task)
         Conversation.user(task)
@@ -105,7 +119,7 @@ class AgentService : Service(), Overlay.Listener {
             val message = "Add your ${provider.label} API key in ODCM provider settings first."
             TaskLog.add("Can't start: $message")
             Conversation.notice(message)
-            if (speakResponses) CompanionService.speakReply(message)
+            if (speakResponses) speak(message)
             notify(message)
             finish()
             return
@@ -133,7 +147,7 @@ class AgentService : Service(), Overlay.Listener {
             onStatus = { status -> if (generation == taskGeneration) { Conversation.status(status); TaskLog.add(status) } },
         ) } catch (e: ModelException) {
             Conversation.notice(e.message ?: "Check provider settings.")
-            if (speakResponses) CompanionService.speakReply(e.message ?: "Check provider settings.")
+            if (speakResponses) speak(e.message ?: "Check provider settings.")
             TaskLog.add("Can't start: ${e.message ?: "invalid provider settings"}")
             finish()
             return
@@ -189,7 +203,7 @@ class AgentService : Service(), Overlay.Listener {
                 outcome = "failed"
                 val message = (e as? ModelException)?.message ?: "The request could not be completed. Check the activity log."
                 Conversation.notice(message)
-                if (speakResponses) CompanionService.speakReply(message)
+                if (speakResponses) speak(message)
                 TaskLog.add("Error: ${e.message ?: e.javaClass.simpleName}")
             } finally {
                 vault?.close()
@@ -214,9 +228,19 @@ class AgentService : Service(), Overlay.Listener {
         }
     }
 
+    private fun speak(text: String) {
+        val token = voiceTurn
+        if (token != null) LiveVoiceService.reply(token, text) else CompanionService.speakReply(text)
+    }
+
+    private fun voiceTaskEnded() {
+        val token = voiceTurn; voiceTurn = null
+        if (token != null) LiveVoiceService.taskEnded(token)
+    }
+
     private fun deliverReply(text: String) {
         Conversation.reply(text)
-        if (speakResponses) CompanionService.speakReply(text)
+        if (speakResponses) speak(text)
         TaskLog.add("Reply: $text")
         replySink?.invoke(text)
     }
@@ -289,7 +313,7 @@ class AgentService : Service(), Overlay.Listener {
         }
     }
 
-    override fun onStop() { CompanionService.stopSpeech(); deferredTasks.clear(); Conversation.notice("Stopped."); runner?.stop(); finish() }
+    override fun onStop() { LiveVoiceService.stop(); CompanionService.stopSpeech(); deferredTasks.clear(); Conversation.notice("Stopped."); runner?.stop(); finish() }
 
     override fun onPauseToggle() {
         val r = runner
@@ -315,6 +339,7 @@ class AgentService : Service(), Overlay.Listener {
         runner = null
         pauseWaiter?.cancel(); pauseWaiter = null
         Conversation.finish()
+        voiceTaskEnded()
         pausedFlag = false
         ControlService.get()?.overlay?.listener = null
         ControlService.get()?.overlay?.hide()
@@ -328,6 +353,7 @@ class AgentService : Service(), Overlay.Listener {
         learningEvents?.close()
         ControlService.get()?.overlay?.hide()
         scope.cancel()
+        voiceTaskEnded()
         if (instance === this) { instance = null; Conversation.finish() }
         super.onDestroy()
     }
@@ -365,16 +391,19 @@ class AgentService : Service(), Overlay.Listener {
         const val EXTRA_TASK = "task"
         const val EXTRA_REPLY_KEY = "reply_key"
         const val EXTRA_SPEAK_REPLY = "speak_reply"
+        const val EXTRA_VOICE_TURN = "voice_turn"
         private const val EXTRA_LEARN = "learn_screens"
         const val ACTION_STOP = "com.ether4o4.odcm.STOP"
         private const val CHANNEL = "odcm_task"
         private const val NOTIF_ID = 42
 
-        fun start(context: Context, task: String, replyKey: String? = null, speakReply: Boolean = false) {
+        fun start(context: Context, task: String, replyKey: String? = null, speakReply: Boolean = false, voiceTurn: String? = null) {
+            if (voiceTurn == null) LiveVoiceService.stop()
             val intent = Intent(context, AgentService::class.java)
                 .putExtra(EXTRA_TASK, task)
                 .putExtra(EXTRA_REPLY_KEY, replyKey)
                 .putExtra(EXTRA_SPEAK_REPLY, speakReply)
+                .putExtra(EXTRA_VOICE_TURN, voiceTurn)
             context.startForegroundService(intent)
         }
         fun learn(context: Context) {

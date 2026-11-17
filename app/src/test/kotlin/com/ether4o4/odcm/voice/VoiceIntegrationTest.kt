@@ -27,44 +27,58 @@ import java.util.Locale
 class VoiceIntegrationTest {
     private fun result(text: String) = Bundle().apply { putStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION, arrayListOf(text)) }
 
-    @Test fun micRequestsPermissionAndDenialNeverStartsATask() {
+    @Test fun micRequestsPermissionAndDenialNeverStartsAService() {
         shadowOf(RuntimeEnvironment.getApplication()).denyPermissions(Manifest.permission.RECORD_AUDIO)
         Robolectric.buildActivity(VoiceActivity::class.java).setup().use { c ->
             val activity = c.get()
             assertNull(ShadowSpeechRecognizer.getLatestSpeechRecognizer())
             activity.onRequestPermissionsResult(41, arrayOf(Manifest.permission.RECORD_AUDIO), intArrayOf(PackageManager.PERMISSION_DENIED))
-            activity.onResults(result("Go home"))
+            assertTrue(activity.isFinishing)
             assertNull(shadowOf(activity).nextStartedService)
         }
     }
 
-    @Test fun onlyFinalSpeechStartsOneVoiceEnabledTaskAndReleasesRecognizer() {
+    @Test fun bootstrapWaitsForMicrophoneForegroundAcknowledgement() {
         shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.RECORD_AUDIO)
-        ShadowSpeechRecognizer.setIsOnDeviceRecognitionAvailable(true)
         Robolectric.buildActivity(VoiceActivity::class.java).setup().use { c ->
             val activity = c.get()
-            val recognizer = shadowOf(ShadowSpeechRecognizer.getLatestSpeechRecognizer())
-            assertTrue(recognizer.lastRecognizerIntent.getBooleanExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false))
-            activity.onPartialResults(result("Go"))
-            assertNull(shadowOf(activity).nextStartedService)
-            activity.onResults(result("Go home"))
             val request = shadowOf(activity).nextStartedService
-            assertEquals("Go home", request.getStringExtra(AgentService.EXTRA_TASK))
-            assertTrue(request.getBooleanExtra(AgentService.EXTRA_SPEAK_REPLY, false))
-            assertTrue(recognizer.isDestroyed)
-            activity.onResults(result("Go home"))
-            assertNull(shadowOf(activity).nextStartedService)
+            assertEquals(LiveVoiceService::class.java.name, request.component?.className)
+            assertFalse(activity.isFinishing)
+            assertNull(ShadowSpeechRecognizer.getLatestSpeechRecognizer())
+            @Suppress("DEPRECATION")
+            val ack = request.getParcelableExtra<android.os.ResultReceiver>(LiveVoiceService.EXTRA_READY)!!
+            ack.send(android.app.Activity.RESULT_OK, null)
+            shadowOf(Looper.getMainLooper()).idle()
+            assertTrue(activity.isFinishing)
         }
     }
 
-    @Test fun backgroundingCancelsMicAndLateResultsCannotExecute() {
-        shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.RECORD_AUDIO)
-        ShadowSpeechRecognizer.setIsOnDeviceRecognitionAvailable(true)
-        Robolectric.buildActivity(VoiceActivity::class.java).setup().use { c ->
-            c.pause().stop()
-            c.get().onResults(result("Send message"))
-            assertNull(shadowOf(c.get()).nextStartedService)
-        }
+    @Test fun missingVoiceMetadataLoadsAnInstalledLanguageBeforeRejectingPlayback() {
+        ShadowTextToSpeech.addLanguageAvailability(Locale.getDefault())
+        val output = VoiceOutput(RuntimeEnvironment.getApplication())
+        output.speak("Local voice")
+        val tts = ShadowTextToSpeech.getLastTextToSpeechInstance()
+        assertNull(tts.voice)
+        shadowOf(tts).onInitListener.onInit(TextToSpeech.SUCCESS)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Local voice", shadowOf(tts).lastSpokenText)
+        output.close()
+    }
+
+    @Test fun initializationTimeoutReportsFailureAndNeverStartsListening() {
+        var ready = false
+        var error = ""
+        val output = VoiceOutput(RuntimeEnvironment.getApplication(), onFailure = { error = it })
+        output.prepare { ready = true }
+        val tts = ShadowTextToSpeech.getLastTextToSpeechInstance()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(16))
+        assertFalse(ready)
+        assertTrue(error.isNotBlank())
+        assertTrue(shadowOf(tts).isShutdown)
+        shadowOf(tts).onInitListener.onInit(TextToSpeech.SUCCESS)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(ready)
     }
 
     @Test fun offlineTtsQueuesBeforeInitializationAndStopsOnClose() {

@@ -145,13 +145,16 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, checked -> settings.economy = checked }
         })
         root.addView(hint("Chat uses a small prompt. Exact Home/Back/Open-app commands run locally. Use /task to force phone control, /chat to force conversation, or /deep for a larger response budget and Hydrogen on Gemini. /deep may cost more."))
-        root.addView(label("Reasoning effort"))
-        root.addView(Spinner(this).apply {
-            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, Settings.EFFORTS)
-            setSelection(Settings.EFFORTS.indexOf(settings.effort).coerceAtLeast(0))
-            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) { settings.effort = Settings.EFFORTS[position] }
-                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        root.addView(Button(this).apply {
+            fun caption() = "Reasoning effort: ${settings.effort.replaceFirstChar { it.uppercase() }}"
+            text = caption()
+            setOnClickListener {
+                android.app.AlertDialog.Builder(this@MainActivity).setTitle("Reasoning effort")
+                    .setSingleChoiceItems(Settings.EFFORTS.toTypedArray(), Settings.EFFORTS.indexOf(settings.effort).coerceAtLeast(0)) { dialog, index ->
+                        settings.effort = Settings.EFFORTS[index]
+                        text = caption()
+                        dialog.dismiss()
+                    }.setNegativeButton("Cancel", null).show()
             }
         })
         root.addView(button("Last task usage") {

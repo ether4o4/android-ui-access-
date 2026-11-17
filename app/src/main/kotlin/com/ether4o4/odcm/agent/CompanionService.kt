@@ -18,6 +18,7 @@ import android.provider.Settings
 import com.ether4o4.odcm.control.CompanionOverlay
 import com.ether4o4.odcm.ui.VoiceActivity
 import com.ether4o4.odcm.voice.VoiceOutput
+import com.ether4o4.odcm.voice.LiveVoiceService
 
 /**
  * Keeps the companion window on screen over other apps until the user closes it.
@@ -35,7 +36,7 @@ class CompanionService : Service() {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             overlay?.setScreenOn(getSystemService(PowerManager::class.java).isInteractive)
-            if (intent?.action == Intent.ACTION_SCREEN_OFF) speech?.stop()
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) { LiveVoiceService.stop(); speech?.stop() }
         }
     }
 
@@ -57,17 +58,20 @@ class CompanionService : Service() {
         Conversation.initialize(this)
         o.onClose = { stop() }
         o.onSend = { text ->
+            LiveVoiceService.stop()
             runCatching { AgentService.start(this, text); true }.getOrElse {
                 Conversation.notice("Could not start the request. Open ODCM and try again."); false
             }
         }
-        o.onStop = { speech?.stop(); AgentService.stopCurrent() }
+        o.onStop = { LiveVoiceService.stop(); speech?.stop(); AgentService.stopCurrent() }
         o.onPause = { AgentService.togglePause() }
         o.onMic = {
-            speech?.close(); speech = null // Pick up any newly selected Android engine/voice.
-            voiceCapture = true
-            runCatching { startActivity(Intent(this, VoiceActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                .onFailure { voiceCapture = false; o.show(); Conversation.notice("Could not open the microphone. Open ODCM and try again.") }
+            if (LiveVoiceService.isRunning) LiveVoiceService.stop()
+            else {
+                speech?.close(); speech = null
+                runCatching { startActivity(Intent(this, VoiceActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    .onFailure { Conversation.notice("Could not open the microphone. Open ODCM and try again.") }
+            }
         }
         o.show(CompanionOverlay.Mode.BOX)
         overlay = o
@@ -84,6 +88,7 @@ class CompanionService : Service() {
     }
 
     private fun stop() {
+        LiveVoiceService.stop()
         speech?.close(); speech = null
         chatJob?.cancel(); chatJob = null
         if (receiverRegistered) { unregisterReceiver(screenReceiver); receiverRegistered = false }
@@ -96,6 +101,7 @@ class CompanionService : Service() {
     }
 
     override fun onDestroy() {
+        LiveVoiceService.stop()
         speech?.close(); speech = null
         chatJob?.cancel(); chatJob = null
         if (receiverRegistered) { unregisterReceiver(screenReceiver); receiverRegistered = false }
@@ -137,6 +143,7 @@ class CompanionService : Service() {
             if (it.speech == null) it.speech = VoiceOutput(it)
             it.speech?.speak(text)
         } }
+        fun voiceState(state: String?) { instance?.overlay?.setVoiceState(state) }
         fun stopSpeech() { instance?.speech?.stop() }
 
         fun canDrawOverlays(context: Context): Boolean =
