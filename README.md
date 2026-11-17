@@ -1,5 +1,6 @@
 # ODCM — On-Device Control Module
 
+
 ## Download ODCM
 
 **[Download the latest ODCM APK](https://github.com/ether4o4/android-ui-access-/releases/download/android-latest/ODCM-debug.apk)**
@@ -9,14 +10,64 @@ replace the APK at this same address after tests and lint pass. Download this
 single APK directly; there is no need to download or unpack the three-APK
 GitHub Actions artifact.
 
-Current app version: **0.3.2 (build 11)**, including companion chat, continuous
-writing during tasks, and the supplied sleeping animation while idle or paused.
-The minimized bubble supports tapping to open chat and dragging to move it.
+Current app version: **0.3.3 (build 12)**. Adds economical requests, Z.ai GLM,
+provider cooldowns, and a movable/resizable companion that remembers its layout.
+The keyboard temporarily fits the conversation above the IME; closing it restores
+the saved geometry. Voice work remains separate from this release.
 
 This download installs the `com.ether4o4.odcm.debug` package. Preview and Local
 Preview are separate installations. CI signing keys can differ between builds;
 if Android reports a signing conflict, preserve the installed app and its data.
 Do not uninstall it to force an update.
+
+## Request economy and provider limits
+
+- Select **Z.ai · GLM Flash** and save a standard Z.ai API key to try
+  `glm-4.7-flash`. The preset uses the general API endpoint. Free pricing does not
+  remove account quotas or guarantee availability. Existing keys are preserved.
+- Economy mode defaults on. If the saved Gemini model is Hydrogen, ordinary
+  requests use `gemini-2.5-flash-lite`; `/deep your request` explicitly uses
+  Hydrogen and a larger output budget. Other custom model selections are kept.
+  No cross-provider or paid fallback happens automatically.
+- Clear conversational prompts use a small tool-free request even when
+  accessibility is enabled. Ambiguous prompts keep phone tools. `/chat` forces
+  conversation; `/task` forces phone control; `/deep` increases effort/budget.
+- Exact Home, Back, Recents, Notifications, Quick Settings and unambiguous
+  `Open <installed app>` requests use no model. They still run through the same
+  policy, approval, fresh-screen checks and action verification as AI tasks.
+- Only the latest screen is retained. After three recent tool exchanges, older
+  exchanges become a small outcome ledger. The original goal and follow-ups
+  remain intact. `read_task_history` can recover the full removed tool results
+  during that task. The app keeps new conversation messages in a private local
+  `conversation.jsonl`; only a selected recent/relevant window goes to the model.
+- Streaming and non-streaming calls respect Retry-After (seconds/date) and Gemini
+  retry-delay metadata. Transient rejections get at most two retries; waits over
+  a minute and exhausted quotas stop with an explanation. Stop cancels waits.
+  In-process cooldowns also cover new requests to the same endpoint/model/key.
+  Interrupted streams are never blindly replayed. The app cannot replenish an
+  account's daily quota or credits.
+- **Last task usage** shows provider-reported input/output, reported reasoning,
+  cached tokens, request/retry count and outcome. Reports are also kept in private
+  `usage.jsonl`. Cost estimates use published standard text rates checked on
+  2026-11-16; they are not invoices, account-tier detection, or guarantees. Missing
+  usage reports (including rejected/interrupted calls) are explicitly counted.
+
+## Companion positioning
+
+Drag the title to move the panel. Drag **◢** beside the composer horizontally,
+vertically or diagonally to resize with the top-left corner fixed. Screen bounds
+and minimum usable dimensions apply. Geometry is saved separately for compact,
+expanded and bubble modes, and for each orientation. Keyboard accommodation is
+temporary and does not replace the saved dimensions. The inactive overlay is
+layered below the keyboard; the active composer hides the scene and logs to
+leave room for typing. The keyboard can still vary by device/IME; physical Galaxy
+verification is required in addition to the automated geometry/layout tests.
+
+Sources for the provider integration:
+- https://docs.z.ai/guides/overview/pricing
+- https://docs.z.ai/guides/capabilities/thinking-mode
+- https://ai.google.dev/gemini-api/docs/openai
+- https://console.groq.com/docs/reasoning
 
 ## Companion and AI providers
 
@@ -31,7 +82,7 @@ while a phone task is running are consumed at decision boundaries: a new message
 invalidates a pending old action, including while approval is pending. Pause and
 Stop remain available. Without Accessibility, text chat and retrieved vault
 references work, but device-action tools are omitted. Completed chat is stored
-privately with bounded history; only recent conversation is used for continuity.
+privately, with a bounded display window and a full local archive of new messages; only selected recent/relevant conversation is sent for continuity.
 Relevant conversation and vault excerpts go to the selected model provider.
 
 The supplied writing video is converted into a silent 5.5-second animated WebP
@@ -48,13 +99,13 @@ See [scene provenance](art/companion/README.md).
 Select **AI provider**, enter its key when required, then tap **Save provider
 settings**. Model, endpoint and encrypted keys stay separate for each provider;
 existing Claude settings are preserved. Available presets are Anthropic, Groq,
-OpenRouter Free, Gemini, Hugging Face, local Ollama and a custom OpenAI-compatible
+Z.ai GLM Flash, OpenRouter Free, Gemini, Hugging Face, local Ollama and a custom OpenAI-compatible
 endpoint. Both API protocols support sequential tool calls and cancellation.
 Malformed or multiple actions are rejected before any device action runs.
 
 - **Groq:** start with `openai/gpt-oss-20b` and a [Groq key](https://console.groq.com/keys). A free tier is available with account-specific limits.
 - **OpenRouter:** `openrouter/free` uses eligible free tool-capable models. Create an [OpenRouter key](https://openrouter.ai/settings/keys); multi-step tasks consume several requests. ODCM does not switch to a paid model automatically.
-- **Gemini:** the `gemini-4-hydrogen` preset has a free tier, subject to account availability and limits. Google's free-tier data terms may allow inputs to be used to improve products.
+- **Gemini:** defaults to `gemini-2.5-flash-lite`; `/deep` selects `gemini-4-hydrogen`. Free-tier access is subject to account availability and limits. Google's free-tier data terms may allow inputs to be used to improve products.
 - **Hugging Face:** supported as an optional provider; free accounts currently have no included Inference Providers credits.
 - **Ollama on this phone:** start the server in Termux (`phi` on the configured phone), select Local Ollama and model `phi4-mini`. The endpoint is `http://127.0.0.1:11434/v1/chat/completions`; no API key is required. Local model availability, speed and tool reliability depend on the installed model and device.
 

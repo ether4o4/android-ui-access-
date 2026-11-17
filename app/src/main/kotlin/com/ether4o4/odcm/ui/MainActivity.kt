@@ -72,6 +72,7 @@ class MainActivity : Activity() {
         root.addView(providerHelp)
         root.addView(button("Open provider key page") {
             val url = when (settings.provider) {
+                ModelProvider.ZAI -> "https://z.ai/manage-apikey/apikey-list"
                 ModelProvider.GROQ -> "https://console.groq.com/keys"
                 ModelProvider.OPENROUTER -> "https://openrouter.ai/settings/keys"
                 ModelProvider.GEMINI -> "https://aistudio.google.com/api-keys"
@@ -99,6 +100,7 @@ class MainActivity : Activity() {
             endpointField.setText(settings.endpoint)
             endpointField.isEnabled = provider in listOf(ModelProvider.OLLAMA, ModelProvider.CUSTOM)
             providerHelp.text = when (provider) {
+                ModelProvider.ZAI -> "GLM-4.7-Flash is listed free by Z.ai; account limits and availability apply. Use a standard API key, not the coding-plan endpoint."
                 ModelProvider.GROQ -> "Free tier available with a Groq key; account limits apply. No automatic paid fallback."
                 ModelProvider.OPENROUTER -> "openrouter/free routes to free models that support tools. Free request limits apply; multi-step tasks use several requests."
                 ModelProvider.GEMINI -> "Free tier available for the preset model, subject to account limits. Google may use free-tier inputs to improve its products."
@@ -136,6 +138,27 @@ class MainActivity : Activity() {
         }
         showProvider()
         root.addView(button("Save provider settings") { if (saveProvider()) toast("Provider settings saved") })
+
+        root.addView(CheckBox(this).apply {
+            text = "Economy mode · use Flash-Lite for routine Gemini requests"
+            isChecked = settings.economy
+            setOnCheckedChangeListener { _, checked -> settings.economy = checked }
+        })
+        root.addView(hint("Chat uses a small prompt. Exact Home/Back/Open-app commands run locally. Use /task to force phone control, /chat to force conversation, or /deep for a larger response budget and Hydrogen on Gemini. /deep may cost more."))
+        root.addView(label("Reasoning effort"))
+        root.addView(Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, Settings.EFFORTS)
+            setSelection(Settings.EFFORTS.indexOf(settings.effort).coerceAtLeast(0))
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) { settings.effort = Settings.EFFORTS[position] }
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            }
+        })
+        root.addView(button("Last task usage") {
+            android.app.AlertDialog.Builder(this).setTitle("Last task usage")
+                .setMessage(getSharedPreferences("odcm_usage", MODE_PRIVATE).getString("last_task", "No completed requests yet."))
+                .setPositiveButton("OK", null).show()
+        })
 
         root.addView(label("Autonomy"))
         val autonomy = TextView(this)
@@ -199,7 +222,7 @@ class MainActivity : Activity() {
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
             startActivityForResult(intent, REQ_PICK_IMAGE)
         })
-        root.addView(hint("Pick any image (PNG/JPG, or an animated GIF/WebP) for the face. Drag to move; ⤢ full, — bubble, ✕ close."))
+        root.addView(hint("Pick any image (PNG/JPG, or an animated GIF/WebP) for the face. Drag the title to move; drag the bottom-right grip to resize. Position and size are remembered. ⤢ logs, — bubble, ✕ close."))
 
         root.addView(divider())
         root.addView(label("Try a task"))
@@ -210,9 +233,6 @@ class MainActivity : Activity() {
             if (task.isEmpty()) { toast("Type a task first"); return@button }
             if (ControlService.get() == null) { toast("Enable Accessibility for ODCM first"); refreshStatus(); return@button }
             if (!saveProvider()) return@button
-            if (settings.provider.requiresKey && !secrets.has(settings.provider.keyName)) {
-                toast("Save your ${settings.provider.label} API key first"); return@button
-            }
             settings.autonomy = levels[levelIndex]
             settings.rules = rulesField.text.toString()
             settings.blockedPackages = blockedField.text.toString()
