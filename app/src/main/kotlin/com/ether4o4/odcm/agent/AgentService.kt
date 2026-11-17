@@ -398,6 +398,7 @@ class AgentService : Service(), Overlay.Listener {
         private const val NOTIF_ID = 42
 
         fun start(context: Context, task: String, replyKey: String? = null, speakReply: Boolean = false, voiceTurn: String? = null) {
+            if (voiceTurn == null) LiveVoiceService.stop()
             val intent = Intent(context, AgentService::class.java)
                 .putExtra(EXTRA_TASK, task)
                 .putExtra(EXTRA_REPLY_KEY, replyKey)

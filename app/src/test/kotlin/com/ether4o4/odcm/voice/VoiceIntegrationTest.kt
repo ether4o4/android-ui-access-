@@ -66,6 +66,21 @@ class VoiceIntegrationTest {
         output.close()
     }
 
+    @Test fun initializationTimeoutReportsFailureAndNeverStartsListening() {
+        var ready = false
+        var error = ""
+        val output = VoiceOutput(RuntimeEnvironment.getApplication(), onFailure = { error = it })
+        output.prepare { ready = true }
+        val tts = ShadowTextToSpeech.getLastTextToSpeechInstance()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(16))
+        assertFalse(ready)
+        assertTrue(error.isNotBlank())
+        assertTrue(shadowOf(tts).isShutdown)
+        shadowOf(tts).onInitListener.onInit(TextToSpeech.SUCCESS)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(ready)
+    }
+
     @Test fun offlineTtsQueuesBeforeInitializationAndStopsOnClose() {
         val output = VoiceOutput(RuntimeEnvironment.getApplication())
         output.speak("Hello Capo")

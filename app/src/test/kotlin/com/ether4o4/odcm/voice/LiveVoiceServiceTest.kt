@@ -124,6 +124,19 @@ class LiveVoiceServiceTest {
         } finally { controller.destroy() }
     }
 
+    @Test fun stoppedSessionCannotExecuteAnAlreadyQueuedAgentIntent() {
+        val controller = start()
+        try {
+            shadowOf(ShadowSpeechRecognizer.getLatestSpeechRecognizer()).triggerOnResults(result("Go home")); main.idle()
+            val queued = shadowOf(controller.get()).nextStartedService
+            LiveVoiceService.stop()
+            val before = Conversation.state.value.messages
+            val agent = Robolectric.buildService(AgentService::class.java, queued).create().startCommand(0, 1)
+            assertEquals(before, Conversation.state.value.messages)
+            agent.destroy()
+        } finally { controller.destroy() }
+    }
+
     @Test fun revokedPermissionNeverStartsRecognition() {
         shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
         val controller = Robolectric.buildService(LiveVoiceService::class.java).create().startCommand(0, 1)
