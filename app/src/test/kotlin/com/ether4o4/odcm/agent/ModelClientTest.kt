@@ -74,7 +74,7 @@ class ModelClientTest {
         assertTrue(decision.await().exceptionOrNull() is ModelException)
     }
 
-    private fun client(transport: Call.Factory) = ModelClient("test-key", "test-model", "low", "test", callFactory = transport)
+    private fun client(transport: Call.Factory) = ModelClient("test-key-${System.identityHashCode(transport)}", "test-model", "low", "test", callFactory = transport)
 
     private class FakeTransport : Call.Factory {
         val calls = mutableListOf<FakeCall>()

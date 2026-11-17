@@ -47,9 +47,18 @@ class ModelClient(
     private val endpoint: String = provider.defaultEndpoint,
     private val onTextDelta: ((String) -> Unit)? = null,
     private val allowTools: Boolean = true,
+    private val onStatus: (String) -> Unit = {},
+    private val maxOutputTokens: Int = if (allowTools) 1536 else 768,
 ) : TaskModel {
-    private val history = JSONArray()
     private val anthropic = provider == ModelProvider.ANTHROPIC
+    private val context = RequestHistory(anthropic)
+    private val history get() = context.messages
+    internal val usage = TaskUsage()
+    private val cooldownKey = endpoint + "|" + model + "|" + com.ether4o4.odcm.core.ScreenIdentity.hash(apiKey)
+
+    override fun readHistory(offset: Int): String = context.read(offset)
+    override fun setCurrentScreen(text: String) = context.addScreen(text)
+
 
     init {
         val url = endpoint.toHttpUrlOrNull()
@@ -87,9 +96,12 @@ class ModelClient(
 
     override suspend fun next(): ModelDecision {
         currentCoroutineContext().ensureActive()
+        context.compact()
+        if (history.toString().length > 100_000) throw ModelException("This task has too much context. Start a new task with the remaining goal; your conversation and logs are still on this phone.")
         val body = if (anthropic) anthropicBody() else chatBody()
         if (!allowTools) { body.remove("tools"); body.remove("tool_choice"); body.remove("parallel_tool_calls") }
-        val response = if (onTextDelta == null) post(body) else postStream(body.put("stream", true))
+        val response = requestWithCooldown(body)
+        usage.record(response)
         currentCoroutineContext().ensureActive()
         return try {
             val end = if (anthropic) response.optString("stop_reason") else
@@ -105,7 +117,7 @@ class ModelClient(
 
     private fun anthropicBody(): JSONObject = JSONObject()
             .put("model", model)
-            .put("max_tokens", 4096)
+            .put("max_tokens", maxOutputTokens.coerceIn(256, 8192))
             .put("output_config", JSONObject().put("effort", normalizedEffort()))
             .put("system", JSONArray().put(
                 block("text") {
@@ -130,7 +142,15 @@ class ModelClient(
         }
         return JSONObject().put("model", model).put("messages", messages).put("tools", tools)
             .put("tool_choice", "auto").put("parallel_tool_calls", false)
-            .put("stream", false).put("max_tokens", 4096)
+            .put("stream", false).put("max_tokens", maxOutputTokens.coerceIn(256, 8192)).apply {
+                if (provider == ModelProvider.ZAI) remove("parallel_tool_calls")
+                when {
+                    provider == ModelProvider.ZAI && model.startsWith("glm-4.") -> put("thinking", JSONObject().put("type", if (effort == "high") "enabled" else "disabled"))
+                    provider == ModelProvider.ZAI && (model.startsWith("glm-5.2") || model.startsWith("glm-5.3")) -> put("reasoning_effort", if (effort == "high") "high" else "low")
+                    provider == ModelProvider.GROQ && model.startsWith("openai/gpt-oss-") -> put("reasoning_effort", normalizedEffort())
+                    provider == ModelProvider.GEMINI -> put("reasoning_effort", if (model.startsWith("gemini-2.5-flash") && effort == "low") "none" else normalizedEffort())
+                }
+            }
     }
 
     private fun anthropicDecision(response: JSONObject): ModelDecision {
@@ -189,9 +209,13 @@ class ModelClient(
             val function = call.getJSONObject("function")
             toolName = requiredString(function, "name")
             requireKnownTool(toolName)
-            val arguments = function.get("arguments") as? String
-                ?: throw ModelException("The model returned malformed action arguments; no action was executed.")
+            val arguments = when (val value = function.get("arguments")) {
+                is String -> value
+                is JSONObject -> if (provider == ModelProvider.ZAI) value.toString() else null
+                else -> null
+            } ?: throw ModelException("The model returned malformed action arguments; no action was executed.")
             toolArgs = toMap(parseObject(arguments))
+            function.put("arguments", arguments)
         } else if (choice.optString("finish_reason") == "tool_calls") {
             throw ModelException("The model omitted its action; no action was executed.")
         }
@@ -232,23 +256,46 @@ class ModelClient(
             builder.addHeader("x-api-key", apiKey).addHeader("anthropic-version", API_VERSION)
         } else if (apiKey.isNotBlank()) builder.addHeader("Authorization", "Bearer $apiKey")
         val request = builder.build()
-        repeat(2) { attempt ->
+        val response = callFactory.newCall(request).awaitPayload()
+        currentCoroutineContext().ensureActive()
+        if (response.code in 200..299) return parseObject(response.payload)
+        throw ProviderCooldown.parse(response.code, response.headers, response.payload)
+    }
+
+    private suspend fun requestWithCooldown(body: JSONObject): JSONObject {
+        for (attempt in 0..2) {
             currentCoroutineContext().ensureActive()
+            val wait = ProviderCooldown.remaining(cooldownKey)
+            if (wait > 60_000) throw ModelException("${provider.label} is cooling down for ${(wait + 999) / 1000}s. Check quota/billing or choose another provider; resending now will not help.")
+            if (wait > 0) {
+                onStatus("${provider.label} rate limit · waiting ${(wait + 999) / 1000}s · Stop cancels")
+                delay(wait)
+            }
+            onStatus("Thinking…")
+            usage.calls++
+            usage.estimatedInput += body.toString().length / 4
             try {
-                val response = callFactory.newCall(request).awaitPayload()
-                currentCoroutineContext().ensureActive()
-                if (response.code in 200..299) return parseObject(response.payload)
-                // 429 and 5xx are worth one retry; everything else is final.
-                if ((response.code == 429 || response.code >= 500) && attempt == 0) {
-                    delay(1500)
-                    return@repeat
+                if (onTextDelta == null) return post(body)
+                body.put("stream", true)
+                if (provider == ModelProvider.ZAI) {
+                    if (allowTools) body.put("tool_stream", true)
+                } else if (!anthropic) body.put("stream_options", JSONObject().put("include_usage", true))
+                return postStream(body)
+            } catch (e: ProviderHttpException) {
+                if (e.code == 429) ProviderCooldown.record(cooldownKey, if (e.quota) maxOf(e.waitMs, 300_000) else e.waitMs)
+                if (e.quota) throw ModelException("${provider.label} quota/credits are exhausted (HTTP ${e.code}). Check its billing/limits or choose another provider. Automatic retries stopped.")
+                if (e.code !in setOf(429, 502, 503, 504) || attempt == 2 || e.waitMs > 60_000) {
+                    if (e.code == 429) throw ModelException("${provider.label} rate limit (429). Wait at least ${(e.waitMs + 999) / 1000}s. Repeated 429s can mean a daily quota; check the provider's limits or switch providers.")
+                    throw ModelException(apiError(e.code))
                 }
-                throw ModelException(apiError(response.code))
+                usage.retries++
+                if (e.code != 429) { onStatus("Provider busy · retrying shortly"); delay(e.waitMs) }
             } catch (e: IOException) {
-                if (attempt == 0) { delay(1000); return@repeat }
+                // A timeout can occur after the provider accepted a billable request. Do not blindly replay.
+                throw ModelException("Connection interrupted. No action was executed; check your connection before retrying.")
             }
         }
-        throw ModelException("Could not connect to ${provider.label}. Check the endpoint and connection.")
+        throw ModelException("Provider unavailable.")
     }
 
     private suspend fun postStream(body: JSONObject): JSONObject {
@@ -266,7 +313,7 @@ class ModelClient(
                 override fun onResponse(call: Call, response: Response) {
                     try {
                         val result = response.use { reply ->
-                            if (!reply.isSuccessful) throw ModelException(apiError(reply.code))
+                            if (!reply.isSuccessful) throw ProviderCooldown.parse(reply.code, reply.headers, reply.body?.string().orEmpty())
                             val payload = reply.body ?: throw ModelException("The model returned an empty response.")
                             if (payload.contentType()?.subtype?.contains("event-stream") != true) {
                                 // Some compatible servers ignore stream=true; retain a complete-response fallback.
@@ -290,7 +337,7 @@ class ModelClient(
                         }
                         if (continuation.isActive) continuation.resume(result)
                     } catch (e: Exception) {
-                        val safe = e as? ModelException ?: ModelException("The response stream was interrupted; no action was executed. Retry when connected.")
+                        val safe = if (e is ProviderHttpException || e is ModelException) e else ModelException("The response stream was interrupted; no action was executed. Retry when connected.")
                         if (continuation.isActive) continuation.resumeWithException(safe)
                     }
                 }
@@ -298,7 +345,7 @@ class ModelClient(
         }
     }
 
-    private data class HttpPayload(val code: Int, val payload: String)
+    private data class HttpPayload(val code: Int, val payload: String, val headers: okhttp3.Headers)
 
     /** Cancellation also closes a response body that is still arriving from the network. */
     private suspend fun Call.awaitPayload(): HttpPayload = suspendCancellableCoroutine { continuation ->
@@ -311,7 +358,7 @@ class ModelClient(
 
             override fun onResponse(call: Call, response: Response) {
                 try {
-                    val payload = response.use { HttpPayload(it.code, it.body?.string().orEmpty()) }
+                    val payload = response.use { HttpPayload(it.code, it.body?.string().orEmpty(), it.headers) }
                     if (continuation.isActive) continuation.resume(payload)
                 } catch (e: IOException) {
                     if (continuation.isActive) continuation.resumeWithException(e)
@@ -349,7 +396,7 @@ class ModelClient(
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(90, TimeUnit.SECONDS)
                 .followRedirects(false)
-                .retryOnConnectionFailure(true)
+                .retryOnConnectionFailure(false)
                 .build()
         }
 

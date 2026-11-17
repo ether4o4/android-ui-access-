@@ -97,6 +97,7 @@ class Policy(
             is AgentAction.SearchVault -> "search the vault"
             is AgentAction.ReadVault -> "read ${action.path}"
             is AgentAction.ReadScreenMap -> "read the current screen key"
+            is AgentAction.ReadTaskHistory -> "read earlier task results"
             is AgentAction.ReadScreen -> "read all visible screen text"
             is AgentAction.OpenApp -> "open ${action.name}"
             is AgentAction.Wait -> "wait"

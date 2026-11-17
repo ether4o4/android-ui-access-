@@ -12,7 +12,8 @@ enum class ModelProvider(
     ANTHROPIC("anthropic", "Anthropic", "https://api.anthropic.com/v1/messages", "claude-opus-5-5", "anthropic_api_key"),
     OPENROUTER("openrouter", "OpenRouter Free", "https://openrouter.ai/api/v1/chat/completions", "openrouter/free", "openrouter_api_key"),
     GROQ("groq", "Groq", "https://api.groq.com/openai/v1/chat/completions", "openai/gpt-oss-20b", "groq_api_key"),
-    GEMINI("gemini", "Gemini", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "gemini-4-hydrogen", "gemini_api_key"),
+    ZAI("zai", "Z.ai · GLM Flash", "https://api.z.ai/api/paas/v4/chat/completions", "glm-4.7-flash", "zai_api_key"),
+    GEMINI("gemini", "Gemini", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "gemini-2.5-flash-lite", "gemini_api_key"),
     HUGGING_FACE("hugging_face", "Hugging Face (credits required)", "https://router.huggingface.co/v1/chat/completions", "openai/gpt-oss-120b", "hugging_face_api_key"),
     // Phi-4 Mini supports tool calls, but device-agent reliability must be tested on the phone.
     OLLAMA("ollama", "Ollama (local)", "http://127.0.0.1:11434/v1/chat/completions", "phi4-mini", "ollama_api_key", false),

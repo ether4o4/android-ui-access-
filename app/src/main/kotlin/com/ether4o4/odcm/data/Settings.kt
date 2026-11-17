@@ -25,6 +25,10 @@ class Settings(context: Context) {
             ?.ifBlank { provider.defaultEndpoint } ?: provider.defaultEndpoint
         set(v) = prefs.edit().putString("endpoint_${provider.id}", v.trim()).apply()
 
+    var economy: Boolean
+        get() = prefs.getBoolean("economy", true)
+        set(v) = prefs.edit().putBoolean("economy", v).apply()
+
     var effort: String
         get() = prefs.getString(KEY_EFFORT, "low") ?: "low"
         set(v) = prefs.edit().putString(KEY_EFFORT, v).apply()

@@ -116,4 +116,63 @@ class CompanionOverlayTest {
             overlay.close()
         }
     }
+    @Test @Config(qualifiers = "w411dp-h891dp-mdpi")
+    fun resizeKeepsAnchorAndRestoresSizeAndPositionAfterRecreation() {
+        Robolectric.buildActivity(Activity::class.java).setup().use { controller ->
+            val activity = controller.get()
+            activity.getSharedPreferences("companion_geometry", 0).edit().clear().commit()
+            val overlay = CompanionOverlay(activity)
+            overlay.show()
+            val panel = root(overlay)
+            val lp = panel.layoutParams as WindowManager.LayoutParams
+            val x = lp.x; val y = lp.y; val w = lp.width; val h = lp.height
+            val grip = views(panel).single { it.contentDescription == "Resize companion" }
+            assertTrue(touch(grip, MotionEvent.ACTION_DOWN))
+            assertTrue(touch(grip, MotionEvent.ACTION_MOVE, 60f, 70f))
+            assertTrue(touch(grip, MotionEvent.ACTION_UP, 60f, 70f))
+            assertEquals(x, lp.x); assertEquals(y, lp.y)
+            assertEquals(w + 40, lp.width); assertEquals(h + 50, lp.height)
+            val saved = listOf(lp.x, lp.y, lp.width, lp.height)
+            overlay.close()
+            val restored = CompanionOverlay(activity)
+            try {
+                restored.show()
+                val params = root(restored).layoutParams as WindowManager.LayoutParams
+                assertEquals(saved, listOf(params.x, params.y, params.width, params.height))
+            } finally { restored.close() }
+        }
+    }
+
+    @Test @Config(qualifiers = "w411dp-h891dp-mdpi")
+    fun keyboardFitKeepsComposerVisibleAndRestoresSavedGeometry() {
+        Robolectric.buildActivity(Activity::class.java).setup().use { controller ->
+            val activity = controller.get()
+            activity.getSharedPreferences("companion_geometry", 0).edit().clear().commit()
+            val overlay = CompanionOverlay(activity)
+            try {
+                overlay.show()
+                val panel = root(overlay)
+                val lp = panel.layoutParams as WindowManager.LayoutParams
+                val saved = listOf(lp.x, lp.y, lp.width, lp.height)
+                val edit = views(panel).filterIsInstance<EditText>().single()
+                edit.setText("Keep typing here")
+                touch(edit, MotionEvent.ACTION_DOWN)
+                val insets = android.view.WindowInsets.Builder()
+                    .setInsets(android.view.WindowInsets.Type.ime(), android.graphics.Insets.of(0, 0, 420, 420))
+                    .setVisible(android.view.WindowInsets.Type.ime(), true).build()
+                panel.dispatchApplyWindowInsets(insets)
+                assertTrue(lp.y + lp.height <= 891 - 420)
+                panel.measure(View.MeasureSpec.makeMeasureSpec(lp.width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(lp.height, View.MeasureSpec.EXACTLY))
+                panel.layout(0, 0, lp.width, lp.height)
+                val composer = edit.parent as View
+                assertTrue(composer.bottom <= panel.height)
+                assertTrue(edit.height > 0)
+                assertEquals("Keep typing here", edit.text.toString())
+                assertEquals(0, lp.flags and WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
+                panel.dispatchApplyWindowInsets(android.view.WindowInsets.Builder().setVisible(android.view.WindowInsets.Type.ime(), false).build())
+                assertEquals(saved, listOf(lp.x, lp.y, lp.width, lp.height))
+            } finally { overlay.close() }
+        }
+    }
+
 }

@@ -17,6 +17,8 @@ internal class MessageStream(private val anthropic: Boolean, private val onText:
     var complete = false
         private set
     private var size = 0
+    private val usage = JSONObject()
+    private val reasoningContent = StringBuilder()
 
     fun accept(data: String) {
         size += data.length
@@ -37,7 +39,10 @@ internal class MessageStream(private val anthropic: Boolean, private val onText:
     private fun acceptAnthropic(e: JSONObject) {
         when (e.optString("type")) {
             "ping" -> Unit
-            "message_start" -> { requireValid(!started); started = true }
+            "message_start" -> {
+                requireValid(!started); started = true
+                e.optJSONObject("message")?.optJSONObject("usage")?.let { u -> for (k in u.keys()) usage.put(k, u.get(k)) }
+            }
             "content_block_start" -> {
                 requireValid(started)
                 val i = e.getInt("index")
@@ -79,7 +84,10 @@ internal class MessageStream(private val anthropic: Boolean, private val onText:
                     blocks.getValue(i).put("input", value)
                 }
             }
-            "message_delta" -> stopReason = e.getJSONObject("delta").opt("stop_reason") as? String ?: stopReason
+            "message_delta" -> {
+                stopReason = e.getJSONObject("delta").opt("stop_reason") as? String ?: stopReason
+                e.optJSONObject("usage")?.let { u -> for (k in u.keys()) usage.put(k, u.get(k)) }
+            }
             "message_stop" -> {
                 requireValid(started && stopReason != null && blocks.keys.all { it in closed })
                 complete = true
@@ -88,6 +96,7 @@ internal class MessageStream(private val anthropic: Boolean, private val onText:
     }
 
     private fun acceptCompatible(e: JSONObject) {
+        e.optJSONObject("usage")?.let { u -> for (k in u.keys()) usage.put(k, u.get(k)) }
         val choices = e.getJSONArray("choices")
         if (choices.length() == 0) return // Usage-only final chunk.
         requireValid(choices.length() == 1)
@@ -115,6 +124,7 @@ internal class MessageStream(private val anthropic: Boolean, private val onText:
                 }
             }
         }
+        delta.opt("reasoning_content")?.let { if (it is String) reasoningContent.append(it) }
         val updates = delta.optJSONArray("tool_calls") ?: JSONArray()
         for (n in 0 until updates.length()) {
             val update = updates.getJSONObject(n)
@@ -140,11 +150,12 @@ internal class MessageStream(private val anthropic: Boolean, private val onText:
         if (stopReason in setOf("length", "max_tokens", "content_filter")) {
             throw ModelException("The model response was cut short; no action was executed. Please retry or shorten the request.")
         }
-        if (anthropic) return JSONObject().put("content", JSONArray(blocks.values.toList())).put("stop_reason", stopReason)
+        if (anthropic) return JSONObject().put("content", JSONArray(blocks.values.toList())).put("stop_reason", stopReason).apply { if (usage.length() > 0) put("usage", usage) }
         val message = JSONObject().put("role", "assistant").put("content", text.toString())
+        if (reasoningContent.isNotEmpty()) message.put("reasoning_content", reasoningContent.toString())
         if (calls.isNotEmpty()) message.put("tool_calls", JSONArray(calls.values.toList()))
         if (reasoning.isNotEmpty()) message.put("reasoning_details", JSONArray(reasoning.values.toList()))
-        return JSONObject().put("choices", JSONArray().put(JSONObject().put("message", message).put("finish_reason", stopReason)))
+        return JSONObject().put("choices", JSONArray().put(JSONObject().put("message", message).put("finish_reason", stopReason))).apply { if (usage.length() > 0) put("usage", usage) }
     }
 
     private fun requireValid(condition: Boolean) { if (!condition) fail() }
