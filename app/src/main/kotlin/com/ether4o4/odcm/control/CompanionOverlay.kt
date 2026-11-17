@@ -63,6 +63,8 @@ class CompanionOverlay(private val context: Context) {
     private var drawer: View? = null
     private var drawerOpen = false
     private var chatButton: Button? = null
+    private var micButton: Button? = null
+    private var voiceState: String? = null
     private var preferredHeight = 0
     private var chatScrollY = 0
     private var chatFollows = true
@@ -79,6 +81,20 @@ class CompanionOverlay(private val context: Context) {
         // Explicit bubble calls are also used by accessibility and tests.
         if (startMode == Mode.BUBBLE) mode = startMode
         render()
+    }
+    fun setVoiceState(state: String?) {
+        voiceState = state
+        micButton?.apply {
+            text = when {
+                state == null -> "🎤"
+                state.startsWith("Listening") -> "●"
+                state == "Speaking" -> "♫"
+                else -> "…"
+            }
+            contentDescription = if (state == null) "Start voice conversation" else "$state · Stop voice conversation"
+            setTextColor(if (state == null) Color.WHITE else Color.rgb(112, 219, 166))
+        }
+        // The voice indicator never opens the user's text drawer.
     }
     fun reloadAvatar() { media.reload() }
     fun refreshLayout() { if (view != null) render() }
@@ -102,7 +118,7 @@ class CompanionOverlay(private val context: Context) {
         view?.let { runCatching { wm.removeView(it) } }
         view = null; input = null; chatText = null; chatScroll = null
         logText = null; logScroll = null; logHeading = null; statusText = null; face = null
-        pauseButton = null; stopButton = null; drawer = null; chatButton = null
+        pauseButton = null; stopButton = null; drawer = null; chatButton = null; micButton = null
     }
     fun close() { hide(); media.close() }
 
@@ -256,7 +272,9 @@ class CompanionOverlay(private val context: Context) {
             setPadding(dp(6), dp(3), dp(6), dp(3))
             setBackgroundColor(0xB0000000.toInt())
         }
-        controls.addView(button("🎤", "Start voice conversation") { releaseKeyboard(); onMic?.invoke() })
+        micButton = button("🎤", "Start voice conversation") { releaseKeyboard(); onMic?.invoke() }
+        controls.addView(micButton)
+        setVoiceState(voiceState)
         chatButton = button(if (drawerOpen) "▴" else "▾", if (drawerOpen) "Hide conversation and keyboard" else "Show conversation and keyboard") { toggleDrawer() }
         controls.addView(chatButton)
         pauseButton = button("Ⅱ", "Pause or resume task") { onPause?.invoke() }
