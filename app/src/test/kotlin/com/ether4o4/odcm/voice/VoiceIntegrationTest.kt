@@ -47,7 +47,7 @@ class VoiceIntegrationTest {
             assertFalse(activity.isFinishing)
             assertNull(ShadowSpeechRecognizer.getLatestSpeechRecognizer())
             @Suppress("DEPRECATION")
-            val ack = request.getParcelableExtra(LiveVoiceService.EXTRA_READY) as android.os.ResultReceiver
+            val ack = request.getParcelableExtra<android.os.ResultReceiver>(LiveVoiceService.EXTRA_READY)!!
             ack.send(android.app.Activity.RESULT_OK, null)
             shadowOf(Looper.getMainLooper()).idle()
             assertTrue(activity.isFinishing)
