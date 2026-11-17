@@ -16,6 +16,8 @@ import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import com.ether4o4.odcm.control.CompanionOverlay
+import com.ether4o4.odcm.ui.VoiceActivity
+import com.ether4o4.odcm.voice.VoiceOutput
 
 /**
  * Keeps the companion window on screen over other apps until the user closes it.
@@ -27,10 +29,13 @@ class CompanionService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var chatJob: Job? = null
     private var receiverRegistered = false
+    private var voiceCapture = false
+    private var speech: VoiceOutput? = null
     private val logListener: (List<String>) -> Unit = { lines -> overlay?.setLogs(lines) }
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             overlay?.setScreenOn(getSystemService(PowerManager::class.java).isInteractive)
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) speech?.stop()
         }
     }
 
@@ -38,7 +43,7 @@ class CompanionService : Service() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        overlay?.refreshLayout()
+        if (!voiceCapture) overlay?.refreshLayout()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -56,8 +61,14 @@ class CompanionService : Service() {
                 Conversation.notice("Could not start the request. Open ODCM and try again."); false
             }
         }
-        o.onStop = { AgentService.stopCurrent() }
+        o.onStop = { speech?.stop(); AgentService.stopCurrent() }
         o.onPause = { AgentService.togglePause() }
+        o.onMic = {
+            speech?.close(); speech = null // Pick up any newly selected Android engine/voice.
+            voiceCapture = true
+            runCatching { startActivity(Intent(this, VoiceActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                .onFailure { voiceCapture = false; o.show(); Conversation.notice("Could not open the microphone. Open ODCM and try again.") }
+        }
         o.show(CompanionOverlay.Mode.BOX)
         overlay = o
         instance = this
@@ -73,6 +84,7 @@ class CompanionService : Service() {
     }
 
     private fun stop() {
+        speech?.close(); speech = null
         chatJob?.cancel(); chatJob = null
         if (receiverRegistered) { unregisterReceiver(screenReceiver); receiverRegistered = false }
         TaskLog.removeListener(logListener)
@@ -84,6 +96,7 @@ class CompanionService : Service() {
     }
 
     override fun onDestroy() {
+        speech?.close(); speech = null
         chatJob?.cancel(); chatJob = null
         if (receiverRegistered) { unregisterReceiver(screenReceiver); receiverRegistered = false }
         TaskLog.removeListener(logListener)
@@ -117,6 +130,14 @@ class CompanionService : Service() {
         @Volatile private var instance: CompanionService? = null
 
         val isRunning: Boolean get() = instance != null
+
+        fun hideForVoice() { instance?.let { it.voiceCapture = true; it.overlay?.hide() } }
+        fun restoreAfterVoice() { instance?.takeIf { it.voiceCapture }?.let { it.voiceCapture = false; it.overlay?.show() } }
+        fun speakReply(text: String) { instance?.takeIf { !it.voiceCapture && it.getSystemService(PowerManager::class.java).isInteractive }?.let {
+            if (it.speech == null) it.speech = VoiceOutput(it)
+            it.speech?.speak(text)
+        } }
+        fun stopSpeech() { instance?.speech?.stop() }
 
         fun canDrawOverlays(context: Context): Boolean =
             Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)

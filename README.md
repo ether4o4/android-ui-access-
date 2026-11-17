@@ -10,10 +10,24 @@ replace the APK at this same address after tests and lint pass. Download this
 single APK directly; there is no need to download or unpack the three-APK
 GitHub Actions artifact.
 
-Current app version: **0.3.3 (build 12)**. Adds economical requests, Z.ai GLM,
-provider cooldowns, and a movable/resizable companion that remembers its layout.
-The keyboard temporarily fits the conversation above the IME; closing it restores
-the saved geometry. Voice work remains separate from this release.
+Current app version: **0.3.4 (build 13)**. The avatar fills the companion panel
+at every size. Tap **▾** for conversation and typing, **▴** to hide it, and **🎤**
+for a spoken turn. Drag **⠿** to move and **◢** to resize; position and size persist.
+
+Voice capture runs in a visible Android microphone dialog and requests microphone
+permission the first time. On-device recognition is preferred when available;
+otherwise Android's selected recognizer is used with an offline preference (that
+preference is not a guarantee: the system recognizer may use a network). Only a
+final transcript is submitted, once per recording. Cancel/backgrounding stops
+capture. Tap the mic again for the next turn; this is not always-on listening.
+
+Final replies to voice requests use the selected Android text-to-speech engine
+and its offline voice. Choose your installed Kokoro/Heart TTS engine in **Android
+voice settings** from ODCM first; standalone WAV samples and model files are not
+Android TTS engines. ODCM does not require a voice endpoint or key and does not
+bundle Kokoro. A network-only or unavailable voice produces a setup notice in the
+chat drawer. Typed-only requests stay silent. **■** stops the task and speech;
+closing the companion or turning the screen off also stops speech playback.
 
 This download installs the `com.ether4o4.odcm.debug` package. Preview and Local
 Preview are separate installations. CI signing keys can differ between builds;
@@ -54,14 +68,19 @@ Do not uninstall it to force an update.
 
 ## Companion positioning
 
-Drag the title to move the panel. Drag **◢** beside the composer horizontally,
-vertically or diagonally to resize with the top-left corner fixed. Screen bounds
-and minimum usable dimensions apply. Geometry is saved separately for compact,
-expanded and bubble modes, and for each orientation. Keyboard accommodation is
-temporary and does not replace the saved dimensions. The inactive overlay is
-layered below the keyboard; the active composer hides the scene and logs to
-leave room for typing. The keyboard can still vary by device/IME; physical Galaxy
-verification is required in addition to the automated geometry/layout tests.
+The scene fills the panel with a crop focused on the character, so its edges may be cropped in a tall
+or wide panel. It is never removed just because the panel is small. Translucent
+icon controls remain over the scene; status, conversation, activity logs and the
+composer are hidden inside the drawer until explicitly opened. Logs appear only
+in expanded mode with the drawer open and enough vertical room.
+
+Drag **⠿** to move. Drag **◢** horizontally, vertically or diagonally to resize
+with the top-left corner fixed. Screen bounds and minimum usable dimensions
+apply. Geometry is saved separately by mode and orientation. Opening/closing the
+drawer keeps the same window geometry and draft. Keyboard accommodation is
+temporary and restores the saved bounds afterward. The avatar stays behind the
+drawer while typing. Physical Galaxy keyboard/microphone/selected TTS-engine
+verification remains necessary in addition to automated layout and lifecycle tests.
 
 Sources for the provider integration:
 - https://docs.z.ai/guides/overview/pricing
@@ -71,11 +90,10 @@ Sources for the provider integration:
 
 ## Companion and AI providers
 
-The medium window has the animated scene, a separate conversation, and a text
-composer anchored at the bottom. **Only the full window shows activity logs.**
-Draft text and conversation survive minimizing or changing window size. The
-keyboard is requested when the composer is tapped and released after sending;
-the panel adjusts when the keyboard is visible.
+The avatar is the full background in both compact and expanded modes. Conversation
+is a dropdown drawer with a composer at its bottom; expanded mode additionally
+offers activity logs inside that drawer. Draft text and conversation survive
+minimizing, opening/closing the drawer, and resizing.
 
 Replies stream from the selected provider into chat. Follow-up messages sent
 while a phone task is running are consumed at decision boundaries: a new message
@@ -91,9 +109,9 @@ working. One retained decoder avoids restarting on chat/log updates or a video
 player seeking back to zero. Idle and paused states play the supplied sleeping
 scene as a silent 19.9-second loop; a chosen custom avatar still overrides idle.
 Both scenes run entirely on Android without an API key or network requests.
-Playback stops when the screen is off, the scene is hidden by the keyboard, or
-the overlay is closed. A request error returns to idle without stopping the
-sleeping scene. Talking footage and live voice are not yet integrated.
+Playback stops when the screen is off, the microphone dialog temporarily replaces
+the overlay, or the overlay is closed. A request error returns to idle without stopping the
+sleeping scene. Talking footage is not integrated; voice replies use the Android TTS engine.
 See [scene provenance](art/companion/README.md).
 
 Select **AI provider**, enter its key when required, then tap **Save provider

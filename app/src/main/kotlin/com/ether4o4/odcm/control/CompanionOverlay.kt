@@ -33,7 +33,7 @@ import android.widget.TextView
 import com.ether4o4.odcm.agent.ChatSnapshot
 import kotlin.math.abs
 
-/** Bubble, conversation panel, and full conversation + diagnostics. The media decoder is retained. */
+/** Avatar fills the window; conversation is an explicit drawer. The media decoder is retained. */
 class CompanionOverlay(private val context: Context) {
     enum class Mode { FULL, BOX, BUBBLE }
     private val wm = context.getSystemService(WindowManager::class.java)
@@ -60,6 +60,9 @@ class CompanionOverlay(private val context: Context) {
     private var stopButton: Button? = null
     private var input: EditText? = null
     private var face: View? = null
+    private var drawer: View? = null
+    private var drawerOpen = false
+    private var chatButton: Button? = null
     private var preferredHeight = 0
     private var chatScrollY = 0
     private var chatFollows = true
@@ -69,6 +72,7 @@ class CompanionOverlay(private val context: Context) {
     var onSend: ((String) -> Boolean)? = null
     var onStop: (() -> Unit)? = null
     var onPause: (() -> Unit)? = null
+    var onMic: (() -> Unit)? = null
 
     fun show(startMode: Mode = Mode.BOX) {
         mode = runCatching { Mode.valueOf(prefs.getString("mode", startMode.name) ?: startMode.name) }.getOrDefault(startMode)
@@ -98,7 +102,7 @@ class CompanionOverlay(private val context: Context) {
         view?.let { runCatching { wm.removeView(it) } }
         view = null; input = null; chatText = null; chatScroll = null
         logText = null; logScroll = null; logHeading = null; statusText = null; face = null
-        pauseButton = null; stopButton = null
+        pauseButton = null; stopButton = null; drawer = null; chatButton = null
     }
     fun close() { hide(); media.close() }
 
@@ -157,8 +161,7 @@ class CompanionOverlay(private val context: Context) {
         }.onFailure { media.unbind() }
     }
 
-    private fun portrait(): ImageView = ImageView(context).apply {
-        scaleType = ImageView.ScaleType.FIT_CENTER
+    private fun portrait(): ImageView = AvatarView(context).apply {
         setBackgroundColor(Color.BLACK)
         contentDescription = "Companion scene"
         media.bind(this)
@@ -172,29 +175,34 @@ class CompanionOverlay(private val context: Context) {
     }
 
     internal fun buildPanel(height: Int, full: Boolean): View {
-        val root = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
+        val root = FrameLayout(context).apply {
             background = background()
-            setPadding(dp(8), dp(6), dp(8), dp(6))
+            clipToOutline = true
         }
-        val header = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
-        val title = label("ODCM", 16f).apply { setTypeface(typeface, Typeface.BOLD); contentDescription = "Drag companion" }
+        face = portrait().also { root.addView(it, FrameLayout.LayoutParams(-1, -1)) }
+        val header = LinearLayout(context).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(6), dp(3), dp(6), dp(3))
+            setBackgroundColor(0x99000000.toInt())
+        }
+        val title = label("⠿", 22f).apply { contentDescription = "Drag companion" }
         header.addView(title, LinearLayout.LayoutParams(0, dp(40), 1f))
         header.addView(button(if (full) "▭" else "⤢", if (full) "Compact companion" else "Expand companion and logs") { switchMode(if (full) Mode.BOX else Mode.FULL) })
         header.addView(button("—", "Minimize companion") { switchMode(Mode.BUBBLE) })
         header.addView(button("×", "Close companion") { onClose?.invoke() })
-        root.addView(header)
+        root.addView(header, FrameLayout.LayoutParams(-1, dp(46), Gravity.TOP))
         attachDrag(title, null)
-        face = portrait().also {
-            root.addView(it, LinearLayout.LayoutParams(-1, minOf(dp(if (full) 190 else 164), height / 3)).apply { bottomMargin = dp(5) })
+        val content = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            background = background()
+            setPadding(dp(8), dp(4), dp(8), dp(4))
+            contentDescription = "Companion text drawer"
+            visibility = if (drawerOpen) View.VISIBLE else View.GONE
         }
-        val status = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
+        drawer = content
+        root.addView(content, FrameLayout.LayoutParams(-1, drawerHeight(height), Gravity.BOTTOM).apply { bottomMargin = dp(46) })
         statusText = label("Ready", 11f).apply { maxLines = 2 }
-        status.addView(statusText, LinearLayout.LayoutParams(0, dp(34), 1f))
-        pauseButton = button("Ⅱ", "Pause or resume task") { onPause?.invoke() }
-        stopButton = button("■", "Stop task") { onStop?.invoke() }
-        status.addView(pauseButton); status.addView(stopButton)
-        root.addView(status)
+        content.addView(statusText, LinearLayout.LayoutParams(-1, dp(30)))
         chatText = label("", 14f).apply {
             setTextIsSelectable(true)
             setPadding(dp(4), dp(6), dp(4), dp(6))
@@ -205,13 +213,13 @@ class CompanionOverlay(private val context: Context) {
             isFillViewport = true
             addView(chatText)
         }
-        root.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        content.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
         if (full) {
             logHeading = label("Activity log", 12f).apply { setTextColor(Color.rgb(155, 163, 179)); setPadding(dp(4), dp(8), 0, dp(4)) }
-            root.addView(logHeading)
+            content.addView(logHeading)
             logText = label("", 11f).apply { setPadding(dp(4), dp(2), dp(4), dp(4)) }
             logScroll = ScrollView(context).apply { contentDescription = "Companion activity history"; addView(logText) }
-            root.addView(logScroll, LinearLayout.LayoutParams(-1, 0, .55f))
+            content.addView(logScroll, LinearLayout.LayoutParams(-1, 0, .55f))
         }
         val composer = LinearLayout(context).apply { gravity = Gravity.BOTTOM; setPadding(0, dp(5), 0, 0) }
         val edit = object : EditText(context) {
@@ -242,15 +250,42 @@ class CompanionOverlay(private val context: Context) {
         input = edit
         composer.addView(edit, LinearLayout.LayoutParams(0, -2, 1f))
         composer.addView(button("↑", "Send message") { send() })
+        content.addView(composer)
+        val controls = LinearLayout(context).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(6), dp(3), dp(6), dp(3))
+            setBackgroundColor(0xB0000000.toInt())
+        }
+        controls.addView(button("🎤", "Start voice conversation") { releaseKeyboard(); onMic?.invoke() })
+        chatButton = button(if (drawerOpen) "▴" else "▾", if (drawerOpen) "Hide conversation and keyboard" else "Show conversation and keyboard") { toggleDrawer() }
+        controls.addView(chatButton)
+        pauseButton = button("Ⅱ", "Pause or resume task") { onPause?.invoke() }
+        stopButton = button("■", "Stop task and speech") { onStop?.invoke() }
+        controls.addView(pauseButton); controls.addView(stopButton)
+        controls.addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
         val grip = label("◢", 22f).apply {
             gravity = Gravity.BOTTOM or Gravity.RIGHT
             contentDescription = "Resize companion"
             setPadding(dp(4), 0, 0, 0)
         }
-        composer.addView(grip, LinearLayout.LayoutParams(dp(36), dp(40)))
+        controls.addView(grip, LinearLayout.LayoutParams(dp(40), dp(40)))
         attachResize(grip)
-        root.addView(composer)
+        root.addView(controls, FrameLayout.LayoutParams(-1, dp(46), Gravity.BOTTOM))
+        updateChat()
         return root
+    }
+
+    private fun drawerHeight(height: Int): Int = if (editing || imeBottom > 0)
+        (height - dp(92)).coerceAtLeast(1)
+    else minOf((height * .60f).toInt(), (height - dp(92)).coerceAtLeast(1))
+
+    private fun toggleDrawer() {
+        drawerOpen = !drawerOpen
+        if (!drawerOpen) releaseKeyboard()
+        drawer?.visibility = if (drawerOpen) View.VISIBLE else View.GONE
+        chatButton?.text = if (drawerOpen) "▴" else "▾"
+        chatButton?.contentDescription = if (drawerOpen) "Hide conversation and keyboard" else "Show conversation and keyboard"
+        applyGeometry()
     }
 
     private fun send() {
@@ -259,7 +294,7 @@ class CompanionOverlay(private val context: Context) {
         if (onSend?.invoke(message) == true) { draft = ""; input?.setText(""); releaseKeyboard() }
     }
     private fun focusComposer() {
-        if (editing) return
+        if (editing || !drawerOpen) return
         val root = view ?: return
         val lp = root.layoutParams as WindowManager.LayoutParams
         lp.flags = lp.flags and (WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM).inv()
@@ -292,16 +327,16 @@ class CompanionOverlay(private val context: Context) {
         val (w, h) = availableSize()
         val visible = geometry.fit(w, (h - imeBottom).coerceAtLeast(1))
         lp.x = visible.x; lp.y = visible.y; lp.width = visible.width; lp.height = visible.height
-        // Keep the input and controls visible even in landscape with the IME open.
-        val hideScene = editing || imeBottom > 0 || visible.height < dp(400)
-        face?.visibility = if (hideScene) View.GONE else View.VISIBLE
-        media.setVisible(!hideScene || mode == Mode.BUBBLE)
-        face?.layoutParams?.let {
-            val height = minOf(dp(if (mode == Mode.FULL) 190 else 164), visible.height / 3)
-            if (it.height != height) { it.height = height; face?.layoutParams = it }
+        // The scene remains the entire background at every size, including while typing.
+        media.setVisible(true)
+        statusText?.visibility = if ((editing || imeBottom > 0) && visible.height < dp(330)) View.GONE else View.VISIBLE
+        input?.maxLines = if (visible.height < dp(350)) 1 else 3
+        drawer?.layoutParams?.let {
+            val height = drawerHeight(visible.height)
+            if (it.height != height) { it.height = height; drawer?.layoutParams = it }
         }
-        logHeading?.visibility = if (editing || visible.height < dp(330)) View.GONE else View.VISIBLE
-        logScroll?.visibility = if (editing || visible.height < dp(330)) View.GONE else View.VISIBLE
+        logHeading?.visibility = if (editing || visible.height < dp(500)) View.GONE else View.VISIBLE
+        logScroll?.visibility = if (editing || visible.height < dp(500)) View.GONE else View.VISIBLE
         if (lastApplied != visible || lastFlags != lp.flags) {
             lastApplied = visible; lastFlags = lp.flags
             runCatching { wm.updateViewLayout(root, lp) }
@@ -344,7 +379,7 @@ class CompanionOverlay(private val context: Context) {
         statusText?.text = snapshot.status
         pauseButton?.visibility = if (snapshot.busy) View.VISIBLE else View.GONE
         pauseButton?.text = if (snapshot.paused) "▶" else "Ⅱ"
-        stopButton?.visibility = if (snapshot.busy) View.VISIBLE else View.GONE
+        stopButton?.visibility = View.VISIBLE
         val text = SpannableStringBuilder()
         fun entry(role: String, message: String) {
             if (text.isNotEmpty()) text.append("\n\n")

@@ -72,7 +72,7 @@ class CompanionMedia(private val context: Context) {
 
     private fun display() {
         val shown = if (active) working ?: resting else resting
-        player.show(shown)
+        player.show(shown, if (shown === sleeping) .36f else .5f)
     }
 
     fun unbind() {
