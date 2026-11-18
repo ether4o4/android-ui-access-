@@ -1,9 +1,34 @@
-# Persistent APK signing
+# Permanent ODCM signing
 
-Old CI builds generated a different debug signing key on each fresh runner. Android rejects an in-place update signed with a different certificate, and uninstalling erases app data and Android Keystore keys. Restoring encrypted preferences alone cannot restore API keys after uninstall.
+Main releases require the GitHub Actions secret `ODCM_DEBUG_KEYSTORE_BASE64`
+and the public SHA-256 fingerprint in `signing/certificate.sha256`. Missing,
+unconfigured, malformed, or mismatched signing material stops the release.
+The final APK certificate must match the pinned fingerprint before upload.
+There are no one-off publishing workflows that bypass these checks.
 
-The rolling release now requires the GitHub Actions repository secret `ODCM_DEBUG_KEYSTORE_BASE64`. It must contain the base64-encoded persistent debug keystore with alias `androiddebugkey`, store password `android`, and key password `android`. Keep a secure private backup of that keystore outside ephemeral runners. Never commit it, print it in logs, put it in a public Actions cache, or upload it as a build artifact.
+## One-time enrollment
 
-If the key used to sign the currently installed APK exists, use that exact key. Compare certificate SHA-256 with `apksigner verify --print-certs` on the installed/current APK and a new build before calling the update compatible. If the old runner key is lost, configuring a new persistent key cannot make it match the old install. Do not tell the user to uninstall or reset their configured app as a routine update step; resolve migration separately.
+On a trusted computer or Termux with GitHub CLI and a Java JDK installed:
 
-If the secret is absent, CI still tests and assembles, but does not upload main-branch APK artifacts or replace `android-latest`. Pull-request APKs use throwaway signing and are for isolated testing only, not upgrades to a configured app. The signing setup cannot be completed through the current GitHub connector because it does not support secret writes.
+```sh
+bash tools/setup-signing.sh
+```
+
+The helper signs into GitHub if required, creates one persistent keystore outside
+the checkout, stores it as an encrypted repository secret, pins its public
+certificate fingerprint, and starts the main build. Re-running it reuses the key;
+it refuses to replace an enrolled certificate. The local backup is
+`$HOME/.local/share/odcm-signing/debug.keystore` (override `ODCM_SIGNING_DIR`).
+Keep a secure second copy. Do not commit, log, cache publicly, or upload private
+signing material as an Actions artifact. The fixed Android debug alias/password
+are compatibility parameters; secrecy comes from protecting the private file.
+
+An existing matching key can be imported with `ODCM_EXISTING_KEYSTORE=/path/to/key`.
+This helper expects alias `androiddebugkey`, store/key password `android`.
+Do not substitute an unrelated local debug key for a lost CI key.
+
+The 0.3.5/0.3.6 releases used ephemeral runner keys. Those keys cannot be
+reconstructed from their APK certificates. A new permanent key does not make
+an update compatible with those installs. After the one-time migration to the
+permanently signed build, subsequent same-package updates preserve app data.
+Do not advise uninstalling the working app until that new build is published.
