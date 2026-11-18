@@ -9,10 +9,12 @@ android {
 
     defaultConfig {
         applicationId = "com.ether4o4.odcm"
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         minSdk = 30
         targetSdk = 35
-        versionCode = 14
-        versionName = "0.3.5"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        versionCode = 15
+        versionName = "0.3.6"
         manifestPlaceholders["appLabel"] = "ODCM"
     }
 
@@ -71,12 +73,15 @@ android {
 }
 
 dependencies {
+    implementation(files("libs/sherpa-onnx-1.13.3.aar"))
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     // Direct HTTP to the Claude Messages API. OkHttp is small and pools connections;
     // JSON uses Android's built-in org.json, so no reflection and nothing extra loaded at runtime.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")

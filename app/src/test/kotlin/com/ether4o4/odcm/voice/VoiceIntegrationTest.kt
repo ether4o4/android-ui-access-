@@ -56,7 +56,7 @@ class VoiceIntegrationTest {
 
     @Test fun missingVoiceMetadataLoadsAnInstalledLanguageBeforeRejectingPlayback() {
         ShadowTextToSpeech.addLanguageAvailability(Locale.getDefault())
-        val output = VoiceOutput(RuntimeEnvironment.getApplication())
+        val output = SystemVoiceOutput(RuntimeEnvironment.getApplication())
         output.speak("Local voice")
         val tts = ShadowTextToSpeech.getLastTextToSpeechInstance()
         assertNull(tts.voice)
@@ -69,7 +69,7 @@ class VoiceIntegrationTest {
     @Test fun initializationTimeoutReportsFailureAndNeverStartsListening() {
         var ready = false
         var error = ""
-        val output = VoiceOutput(RuntimeEnvironment.getApplication(), onFailure = { error = it })
+        val output = SystemVoiceOutput(RuntimeEnvironment.getApplication(), onFailure = { error = it })
         output.prepare { ready = true }
         val tts = ShadowTextToSpeech.getLastTextToSpeechInstance()
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(16))
@@ -82,7 +82,7 @@ class VoiceIntegrationTest {
     }
 
     @Test fun offlineTtsQueuesBeforeInitializationAndStopsOnClose() {
-        val output = VoiceOutput(RuntimeEnvironment.getApplication())
+        val output = SystemVoiceOutput(RuntimeEnvironment.getApplication())
         output.speak("Hello Capo")
         val tts = ShadowTextToSpeech.getLastTextToSpeechInstance()
         val shadow = shadowOf(tts)
@@ -98,7 +98,7 @@ class VoiceIntegrationTest {
     }
 
     @Test fun networkOnlyTtsIsNotSilentlyUsedAndStopClearsPendingSpeech() {
-        val output = VoiceOutput(RuntimeEnvironment.getApplication())
+        val output = SystemVoiceOutput(RuntimeEnvironment.getApplication())
         output.speak("Discard on stop")
         val tts = ShadowTextToSpeech.getLastTextToSpeechInstance()
         val shadow = shadowOf(tts)

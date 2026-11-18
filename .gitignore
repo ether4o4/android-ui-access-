@@ -7,3 +7,9 @@ captures/
 .kotlin/
 *.keystore
 *.jks
+
+
+app/libs/
+app/src/main/assets/kokoro/
+app/src/main/assets/voice-licenses/
+.voice-build/

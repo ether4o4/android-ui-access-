@@ -66,6 +66,18 @@ class TaskRunnerTest {
         guide: GuideStore? = null, limits: StepLimits = StepLimits()) =
         TaskRunner(device, apps, model, policy, callbacks, limits, guide)
 
+    @Test fun invalidToolAndMissingAppFailuresReachTheVisibleLog() = runBlocking {
+        val device = Device(screen())
+        val model = Model("unknown_action" to emptyMap(), "open_app" to mapOf("name" to "Missing app"))
+        val callbacks = Callbacks()
+        runner(device, model, callbacks).run("Open Gmail")
+        val failures = callbacks.statuses.filter { it.startsWith("Action failed:") }
+        assertEquals(2, failures.size)
+        assertTrue(failures.first().contains("unknown_action"))
+        assertTrue(failures.last().contains("No launchable installed app"))
+        assertTrue(device.actions.isEmpty())
+    }
+
     @Test fun userMessageDuringDecisionPreventsTheOldAction() = runBlocking {
         val device = Device(screen())
         val model = Model("tap" to mapOf("index" to 0))
