@@ -17,7 +17,7 @@ Corresponding source and build instructions:
 - sherpa-onnx: https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.3
 - eSpeak: https://github.com/csukuangfj/espeak-ng/tree/f6fed6c58b5e0998b8e68c6610125e2d07d595a7
 - ONNX Runtime: the version and archive hashes used for each Android ABI are
-  recorded in sherpa-onnx's cmake/onnxruntime-android*.cmake files.
+  recorded in sherpa-onnx's build-android-*.sh files.
 
 Run `python3 tools/prepare-bundled-voice.py`, then the normal Gradle build.
 To rebuild the native library, follow the pinned sherpa-onnx source's

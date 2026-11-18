@@ -144,7 +144,7 @@ class CompanionService : Service() {
             it.speech?.speak(text)
         } }
         fun voiceState(state: String?) { instance?.overlay?.setVoiceState(state) }
-        fun stopSpeech() { instance?.speech?.stop() }
+        fun stopSpeech() { instance?.let { it.speech?.close(); it.speech = null } }
 
         fun canDrawOverlays(context: Context): Boolean =
             Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)

@@ -224,11 +224,13 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, checked ->
                 voiceTest?.close(); voiceTest = null
                 com.ether4o4.odcm.voice.LiveVoiceService.stop()
+                CompanionService.stopSpeech()
                 settings.bundledVoice = checked
             }
         })
         root.addView(button("Test voice · works in airplane mode") {
             com.ether4o4.odcm.voice.LiveVoiceService.stop()
+            CompanionService.stopSpeech()
             voiceTest?.close()
             toast("Preparing voice… first use may take a moment")
             voiceTest = com.ether4o4.odcm.voice.VoiceOutput(this,

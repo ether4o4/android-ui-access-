@@ -50,7 +50,7 @@ for name in keep - {'README.md'}:
 assert (assets / 'espeak-ng-data/phondata').is_file()
 licenses = ROOT / 'app/src/main/assets/voice-licenses'
 licenses.mkdir(exist_ok=True)
-for name in ('SHERPA-APACHE-2.0.txt', 'ESPEAK-GPL-3.0.txt', 'VOICE-NOTICES.md'):
+for name in ('SHERPA-APACHE-2.0.txt', 'ESPEAK-GPL-3.0.txt', 'ONNXRUNTIME-LICENSE.txt', 'VOICE-NOTICES.md'):
     shutil.copy2(ROOT / 'third-party/voice' / name, licenses / name)
 shutil.copy2(assets / 'LICENSE', licenses / 'KOKORO-LICENSE.txt')
 print('Bundled voice assets ready:', sum(p.stat().st_size for p in assets.rglob('*') if p.is_file()), 'bytes')
