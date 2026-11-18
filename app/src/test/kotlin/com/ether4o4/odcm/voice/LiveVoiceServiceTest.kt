@@ -30,6 +30,7 @@ class LiveVoiceServiceTest {
     private val main get() = shadowOf(Looper.getMainLooper())
     private fun result(text: String) = Bundle().apply { putStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION, arrayListOf(text)) }
     private fun start() = Robolectric.buildService(LiveVoiceService::class.java).also {
+        com.ether4o4.odcm.data.Settings(app).bundledVoice = false
         Conversation.initialize(app)
         Conversation.finish()
         shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)

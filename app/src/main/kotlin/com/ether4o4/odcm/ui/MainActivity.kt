@@ -36,6 +36,7 @@ class MainActivity : Activity() {
     private lateinit var secrets: SecretStore
     private lateinit var statusView: TextView
     private lateinit var logView: TextView
+    private var voiceTest: com.ether4o4.odcm.voice.VoiceOutput? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -217,11 +218,31 @@ class MainActivity : Activity() {
                 toast("Companion shown — mic to speak, ▾ for chat, ◢ to resize")
             }
         })
+        root.addView(CheckBox(this).apply {
+            text = "Built-in male voice · Michael (offline)"
+            isChecked = settings.bundledVoice
+            setOnCheckedChangeListener { _, checked ->
+                voiceTest?.close(); voiceTest = null
+                com.ether4o4.odcm.voice.LiveVoiceService.stop()
+                CompanionService.stopSpeech()
+                settings.bundledVoice = checked
+            }
+        })
+        root.addView(button("Test voice · works in airplane mode") {
+            com.ether4o4.odcm.voice.LiveVoiceService.stop()
+            CompanionService.stopSpeech()
+            voiceTest?.close()
+            toast("Preparing voice… first use may take a moment")
+            voiceTest = com.ether4o4.odcm.voice.VoiceOutput(this,
+                onIdle = { voiceTest?.close(); voiceTest = null },
+                onFailure = { toast(it) })
+            voiceTest?.speak("Hey Capo. I'm ready. This voice runs right here on your phone.")
+        })
         root.addView(button("Android voice settings") {
             runCatching { startActivity(Intent("com.android.settings.TTS_SETTINGS")) }
                 .onFailure { toast("Open Android Settings → Text-to-speech output") }
         })
-        root.addView(hint("Select your installed offline TTS engine and Heart voice in Android settings. Tap the companion mic for each spoken turn; final replies are read aloud. Recognition prefers on-device support; the system fallback may use the network. No voice endpoint or API key is needed."))
+        root.addView(hint("Michael is included in the app: no voice download, endpoint or voice API charge. Uncheck built-in voice to use your Android offline engine. Tap the companion mic once to start hands-free turns; tap again to stop. Speech recognition prefers on-device support; its Android fallback may use the network."))
         root.addView(button("Hide companion") { CompanionService.stop(this) })
         root.addView(button("Choose companion image") {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
@@ -266,6 +287,7 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        voiceTest?.close(); voiceTest = null
         super.onPause()
         TaskLog.removeListener(logListener)
     }

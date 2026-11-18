@@ -58,7 +58,8 @@ object Prompt {
           Load read_screen_map for a full key. Prefer a known control key when available; tap_known will
           validate it against the live tree. Never invent coordinates for a screen you have not seen.
           Known screens use a compact control list. Use read_screen for omitted text when reading content.
-          Continue documenting newly visited apps, launchers, sites and scrolled pages as part of the task.
+          Screen learning is automatic and passive. Never open unrelated apps to document or explore them.
+          Only navigate to apps required by the current user task; a screen observation is not a new goal.
         - Home, Back, Recents, Notifications and Quick settings have direct system tools. An app drawer
           is launcher-specific: observe its actual icon or gesture instead of assuming a universal button.
     """.trimIndent()

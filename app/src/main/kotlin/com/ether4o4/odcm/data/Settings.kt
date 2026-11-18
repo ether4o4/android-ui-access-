@@ -29,6 +29,10 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("economy", true)
         set(v) = prefs.edit().putBoolean("economy", v).apply()
 
+    var bundledVoice: Boolean
+        get() = prefs.getBoolean("bundled_voice", true)
+        set(v) = prefs.edit().putBoolean("bundled_voice", v).apply()
+
     var effort: String
         get() = prefs.getString(KEY_EFFORT, "low") ?: "low"
         set(v) = prefs.edit().putString(KEY_EFFORT, v).apply()

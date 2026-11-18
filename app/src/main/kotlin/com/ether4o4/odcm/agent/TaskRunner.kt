@@ -91,11 +91,12 @@ class TaskRunner(
             if (decision.toolName == null) {
                 if (decision.plainText.isNotBlank()) { callbacks.reply(decision.plainText); callbacks.status("Done"); return }
                 limits.onResult(false)
+                callbacks.status("Action failed: the model returned no action or reply.")
                 model.addUserText("No action or reply was returned. Use an available tool or explain the result.")
                 continue
             }
             val parsed = AgentAction.parse(decision.toolName, decision.toolArgs)
-            if (parsed.isFailure) { fail(decision.toolUseId, parsed.exceptionOrNull()?.message.orEmpty()); continue }
+            if (parsed.isFailure) { fail(decision.toolUseId, "${decision.toolName}: ${parsed.exceptionOrNull()?.message.orEmpty()}"); continue }
             val action = parsed.getOrThrow()
             if (decision.plainText.isNotBlank()) callbacks.narration(decision.plainText)
             when (action) {
@@ -188,7 +189,7 @@ class TaskRunner(
                     notes.removeAll { it.id == id }; guide.get(id)?.let(notes::add)
                 }
             }
-            callbacks.status(observed.message)
+            if (success) callbacks.status(observed.message)
             if (success) ok(decision.toolUseId, observed.message) else fail(decision.toolUseId, observed.message)
         }
     }
@@ -199,7 +200,7 @@ class TaskRunner(
         currentCoroutineContext().ensureActive()
     }
     private fun ok(id: String?, text: String) { limits.onResult(true); id?.let { model.addToolResult(it, text, false) } }
-    private fun fail(id: String?, text: String) { limits.onResult(false); id?.let { model.addToolResult(it, text, true) } }
+    private fun fail(id: String?, text: String) { callbacks.status("Action failed: $text"); limits.onResult(false); id?.let { model.addToolResult(it, text, true) } }
 
     companion object {
         fun policyFor(level: AutonomyLevel, blocked: List<String>) = Policy(level, blocked)

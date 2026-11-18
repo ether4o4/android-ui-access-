@@ -107,7 +107,7 @@ class LiveVoiceService : Service() {
                 override fun onEvent(eventType: Int, params: Bundle?) = Unit
             })
             update(if (local) "Listening on device" else "Listening with Android")
-            if (!local && emptyAttempts == 0) Conversation.notice("Voice uses Android's speech recognizer; it may use the network. Replies use your downloaded voice.")
+            if (!local && emptyAttempts == 0) Conversation.notice("Voice uses Android's speech recognizer; it may use the network. Replies use the offline voice selected in ODCM.")
             recognizer!!.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
