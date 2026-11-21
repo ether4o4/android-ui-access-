@@ -139,9 +139,18 @@ class CompanionService : Service() {
 
         fun hideForVoice() { instance?.let { it.voiceCapture = true; it.overlay?.hide() } }
         fun restoreAfterVoice() { instance?.takeIf { it.voiceCapture }?.let { it.voiceCapture = false; it.overlay?.show() } }
-        fun speakReply(text: String) { instance?.takeIf { !it.voiceCapture && it.getSystemService(PowerManager::class.java).isInteractive }?.let {
-            if (it.speech == null) it.speech = VoiceOutput(it)
-            it.speech?.speak(text)
+        fun speakReply(text: String) { instance?.takeIf { !it.voiceCapture && it.getSystemService(PowerManager::class.java).isInteractive }?.let { companion ->
+            if (companion.speech == null) {
+                lateinit var output: VoiceOutput
+                output = VoiceOutput(companion, onFailure = { message ->
+                    // Outputs close themselves on failure. A later reply may start a fresh one;
+                    // this reply is not retried and an old callback cannot discard its replacement.
+                    if (companion.speech === output) companion.speech = null
+                    Conversation.notice(message)
+                })
+                companion.speech = output
+            }
+            companion.speech?.speak(text)
         } }
         fun voiceState(state: String?) { instance?.overlay?.setVoiceState(state) }
         fun stopSpeech() { instance?.let { it.speech?.close(); it.speech = null } }
