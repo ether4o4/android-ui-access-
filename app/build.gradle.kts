@@ -69,7 +69,15 @@ android {
         abortOnError = true
         checkReleaseBuilds = true
     }
-    testOptions { unitTests.isIncludeAndroidResources = true }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        // Robolectric resolves its Android runtime separately from Gradle's repositories.
+        // Use the same Maven Central endpoint as mavenCentral(), including checksum verification.
+        // https://robolectric.org/configuring/#system-properties
+        unitTests.all {
+            it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+        }
+    }
 }
 
 dependencies {
