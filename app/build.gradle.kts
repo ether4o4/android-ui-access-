@@ -72,10 +72,11 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
         // Robolectric resolves its Android runtime separately from Gradle's repositories.
-        // Use the same Maven Central endpoint as mavenCentral(), including checksum verification.
+        // Use Google's Maven Central mirror for the large SDK jars; keep checksum verification.
+        // https://docs.cloud.google.com/docs/buildpacks/java#google_cloud_hosted_maven_central_mirror
         // https://robolectric.org/configuring/#system-properties
         unitTests.all {
-            it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+            it.systemProperty("robolectric.dependency.repo.url", "https://maven-central.storage-download.googleapis.com/maven2")
         }
     }
 }
