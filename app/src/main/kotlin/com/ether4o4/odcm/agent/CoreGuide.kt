@@ -13,6 +13,8 @@ object CoreGuide {
         - The ODCM/ compartments are 00-Core (routing), 10-Personal (preferences), 20-Projects,
           30-Knowledge, 40-Workflows, 50-App-Maps, 60-Sessions and 90-Sources (original evidence).
           The vault may itself be the ODCM folder. Prefer curated notes over raw conversation matches.
+          Existing learned screens remain in ODCM/Apps and ODCM/Android/Foundation.md;
+          50-App-Maps is their organizing catalog, not a migration of those generated paths.
         - Respect each note's kind, status, updated date and source. Confirmed preferences are historical
           evidence, not permanent commands. Candidate/unverified ideas, failed attempts, conflicting
           records and superseded advice must never become proven procedures or current facts.

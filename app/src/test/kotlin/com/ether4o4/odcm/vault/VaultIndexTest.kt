@@ -107,4 +107,17 @@ class VaultIndexTest {
         assertEquals(1, reads)
         assertEquals("confirmed", db.search("Current workflow").single().knowledge.status)
     }
+
+    @Test fun initialContextCanSelectDifferentFilesInsteadOfManyChunksFromOneConversation() {
+        val long = file("ODCM/90-Sources/A.md")
+        val second = file("ODCM/90-Sources/B.md")
+        val third = file("ODCM/90-Sources/C.md")
+        db.refresh("tree", listOf(long, second, third)) {
+            val text = if (it.path == long.path) "Termux project notes. ".repeat(2000) else "Termux project detail"
+            ExtractedText(text, "Text indexed")
+        }
+        val hits = db.search("Termux project", 3, distinctFiles = true)
+        assertEquals(listOf(long.path, second.path, third.path), hits.map { it.path })
+        assertEquals(1, hits.count { it.path == long.path })
+    }
 }

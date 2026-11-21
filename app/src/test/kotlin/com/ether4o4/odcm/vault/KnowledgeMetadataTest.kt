@@ -46,4 +46,31 @@ class KnowledgeMetadataTest {
         assertTrue(confirmed.priority(path) > KnowledgeMetadata("workflow", "superseded").priority(path))
         assertTrue(confirmed.priority(path) > KnowledgeMetadata("source", "observed").priority("ODCM/90-Sources/thread.md"))
     }
+
+    @Test fun lateMatchingPassageKeepsExactUtf16ReadOffsetsAndProvenance() {
+        val body = "earlier ".repeat(220) + "😀".repeat(170) + " target_quartz detail " + "later ".repeat(100)
+        val hit = VaultHit("ODCM/90-Sources/thread.md", "", body, 3000, "Text indexed",
+            KnowledgeMetadata("source", "unverified", "2026-11-20", "chatgpt:thread"))
+        val row = JSONArray(VaultReference.render(listOf(hit), excerptChars = 600, query = "target_quartz")).getJSONObject(0)
+        val excerpt = row.getString("excerpt")
+        val start = row.getInt("offset") - hit.offset
+        assertTrue(start > 1000)
+        assertTrue(excerpt.contains("target_quartz"))
+        assertEquals(body.substring(start, start + excerpt.length), excerpt)
+        assertFalse(excerpt.first().isLowSurrogate())
+        assertFalse(excerpt.last().isHighSurrogate())
+        assertEquals(hit.offset + start + excerpt.length, row.getInt("next_offset"))
+        assertEquals(hit.offset, row.getInt("previous_offset"))
+        assertEquals("unverified", row.getString("knowledge_status"))
+        assertEquals("chatgpt:thread", row.getString("source"))
+    }
+
+    @Test fun coreOverviewAlwaysStartsAtItsBeginningEvenWhenQueryMatchesItsTail() {
+        val body = "Operating overview\n" + "routing ".repeat(370) + "target_quartz"
+        val core = VaultHit("00-Core/INDEX.md", "", body, 0, "Text indexed", KnowledgeMetadata("core", "confirmed"))
+        val row = JSONArray(VaultReference.render(listOf(core), excerptChars = 600, query = "target_quartz")).getJSONObject(0)
+        assertEquals(0, row.getInt("offset"))
+        assertTrue(row.getString("excerpt").startsWith("Operating overview"))
+        assertEquals(body.take(600), row.getString("excerpt"))
+    }
 }

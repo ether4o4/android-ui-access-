@@ -5,6 +5,17 @@ and phone task prompts. Personal facts remain in the selected Obsidian vault.
 The contract guides retrieval, organization, workflow verification and reporting;
 it does not add shell, browser, speech-interruption or new file-writing tools.
 
+```mermaid
+flowchart LR
+  Request[Current request] --> Core[Built-in operating guide]
+  Vault[Selected Obsidian vault] --> Index[Local rebuildable text index]
+  Index --> Context[Core overview and relevant excerpts]
+  Context --> Model[Existing model and task flow]
+  Core --> Model
+  Model --> Existing[Existing Android tools or chat reply]
+  Existing --> Verify[Verify and report the result]
+```
+
 ## Vault layout
 
 ```text
@@ -14,15 +25,20 @@ ODCM/
   20-Projects/      project identity, state and decisions
   30-Knowledge/     topic reference
   40-Workflows/     procedures, prerequisites and verification
-  50-App-Maps/      observed screens and controls
+  50-App-Maps/      catalog of observed screens and controls
   60-Sessions/      recent decisions and outcomes
   90-Sources/       historical conversation/document evidence
 ```
 
 Either select the parent vault containing `ODCM/`, or select the ODCM folder itself.
+Existing generated screen notes remain in `ODCM/Apps/` and
+`ODCM/Android/Foundation.md`. `50-App-Maps` organizes references to them; this
+change does not move or rename those learned files.
 Keep `00-Core/INDEX.md` under 2,600 characters including frontmatter. Initial
 retrieval context is capped at 6,500 characters and selects at most three relevant
-search hits in addition to the core overview. Longer details remain searchable.
+files in addition to the core overview. Matching passages are selected with their
+read offsets, so a long conversation's opening cannot hide a later matching detail.
+Longer details remain searchable.
 
 ## Metadata
 
@@ -60,7 +76,7 @@ Do not mark a proposed workflow technically verified merely because it was saved
 5. Use manual refresh after editing notes when immediate visibility is needed.
 
 Automatic retrieval can reuse a successful index refresh for 60 seconds in the
-same app process. Manual refresh still scans immediately. The SQLite index is a
+same active conversation/task. Manual refresh still scans immediately. The SQLite index is a
 rebuildable cache; vault selection isolation remains in force.
 
 ## Verification scope

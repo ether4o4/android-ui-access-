@@ -95,7 +95,7 @@ class VaultIndex(context: Context) : SQLiteOpenHelper(context, "vault-reference.
         VaultStats(files, text, files - text - errors, errors)
     }
 
-    fun search(query: String, limit: Int = 8): List<VaultHit> = synchronized(LOCK) {
+    fun search(query: String, limit: Int = 8, distinctFiles: Boolean = false): List<VaultHit> = synchronized(LOCK) {
         val max = limit.coerceIn(1, 30)
         val expression = VaultText.matchQuery(query)
         if (expression.isEmpty()) return@synchronized emptyList()
@@ -108,8 +108,10 @@ class VaultIndex(context: Context) : SQLiteOpenHelper(context, "vault-reference.
             return hits
         }
         val exact = candidates(true)
-        val matches = if (exact.size >= max) exact else (exact + candidates(false)).distinctBy { it.path to it.offset }
-        matches.sortedByDescending { VaultText.score(it.path, it.excerpt, query) + it.knowledge.priority(it.path) }.take(max)
+        val exactCount = if (distinctFiles) exact.distinctBy { it.path }.size else exact.size
+        val matches = if (exactCount >= max) exact else (exact + candidates(false)).distinctBy { it.path to it.offset }
+        val ranked = matches.sortedByDescending { VaultText.score(it.path, it.excerpt, query) + it.knowledge.priority(it.path) }
+        (if (distinctFiles) ranked.distinctBy { it.path } else ranked).take(max)
     }
 
     /** Optional short routing note, read only from the already selected/indexed vault. */

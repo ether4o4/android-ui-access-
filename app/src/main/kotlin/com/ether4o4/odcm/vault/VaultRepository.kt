@@ -36,8 +36,8 @@ class VaultRepository(private val context: Context) : java.io.Closeable {
     fun referenceContext(query: String): String {
         index.requireTree(tree)
         val core = index.coreIndex()
-        val related = index.search(query, 4).filterNot { it.path == core?.path }.take(3)
-        return VaultReference.render(listOfNotNull(core) + related, VaultReference.CONTEXT_CHARS, 1000, 2600)
+        val related = index.search(query, 4, distinctFiles = true).filterNot { it.path == core?.path }.take(3)
+        return VaultReference.render(listOfNotNull(core) + related, VaultReference.CONTEXT_CHARS, 1000, 2600, query)
     }
     fun search(query: String, limit: Int = 8): List<VaultHit> { index.requireTree(tree); return index.search(query, limit) }
     fun read(path: String, offset: Int = 0): String { index.requireTree(tree); return index.read(path, offset) }

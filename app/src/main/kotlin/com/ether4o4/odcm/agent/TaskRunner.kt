@@ -109,7 +109,7 @@ class TaskRunner(
                         runInterruptible(Dispatchers.IO) {
                             store.refreshForReference()
                             when (action) {
-                                is AgentAction.SearchVault -> renderHits(store.search(action.query))
+                                is AgentAction.SearchVault -> VaultReference.render(store.search(action.query), query = action.query)
                                 is AgentAction.ReadVault -> store.read(action.path, action.offset)
                                 else -> error("Unexpected reference action")
                             }
@@ -222,6 +222,5 @@ class TaskRunner(
             if (action is AgentAction.Swipe && (previous.packageName != current.packageName || previous.surface != current.surface)) return null
             return action
         }
-        private fun renderHits(hits: List<com.ether4o4.odcm.vault.VaultHit>): String = VaultReference.render(hits)
     }
 }
