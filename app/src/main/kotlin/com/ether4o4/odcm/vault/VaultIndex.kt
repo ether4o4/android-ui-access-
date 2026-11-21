@@ -5,19 +5,27 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
-data class VaultHit(val path: String, val uri: String, val excerpt: String, val offset: Int, val status: String)
+data class VaultHit(val path: String, val uri: String, val excerpt: String, val offset: Int, val status: String,
+                    val knowledge: KnowledgeMetadata = KnowledgeMetadata())
 data class VaultStats(val files: Int, val indexed: Int, val filenameOnly: Int, val errors: Int) {
     override fun toString() = "$files files · $indexed with searchable text · $filenameOnly filename only · $errors errors"
 }
 
 /** Private, disposable FTS cache. Source documents stay in the chosen Obsidian folder. */
-class VaultIndex(context: Context) : SQLiteOpenHelper(context, "vault-reference.db", null, 1) {
+class VaultIndex(context: Context) : SQLiteOpenHelper(context, "vault-reference.db", null, 2) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        db.execSQL("CREATE TABLE files (path TEXT PRIMARY KEY, uri TEXT, modified INTEGER, size INTEGER, status TEXT, generation INTEGER)")
+        db.execSQL("CREATE TABLE files (path TEXT PRIMARY KEY, uri TEXT, modified INTEGER, size INTEGER, status TEXT, generation INTEGER, knowledge TEXT NOT NULL DEFAULT '', priority INTEGER NOT NULL DEFAULT 0)")
         db.execSQL("CREATE VIRTUAL TABLE chunks USING fts4(path, body, start, tokenize=unicode61)")
     }
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE files ADD COLUMN knowledge TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE files ADD COLUMN priority INTEGER NOT NULL DEFAULT 0")
+            // Source notes are untouched. Re-extract once to populate metadata in this disposable cache.
+            db.execSQL("UPDATE files SET modified=-1")
+        }
+    }
 
     fun refresh(tree: String, files: List<VaultFile>, force: Boolean = false,
                 progress: (Int, Int) -> Unit = { _, _ -> }, extract: (VaultFile) -> ExtractedText): VaultStats = synchronized(LOCK) {
@@ -43,6 +51,7 @@ class VaultIndex(context: Context) : SQLiteOpenHelper(context, "vault-reference.
             } else {
                 val extracted = try { extract(file) } catch (e: InterruptedException) { throw e }
                     catch (e: Exception) { ExtractedText("", "Error: ${e.message?.take(200) ?: e.javaClass.simpleName}") }
+                val metadata = KnowledgeMetadata.parse(extracted.text)
                 db.beginTransaction()
                 try {
                     db.delete("chunks", "path=?", arrayOf(file.path))
@@ -57,6 +66,7 @@ class VaultIndex(context: Context) : SQLiteOpenHelper(context, "vault-reference.
                     db.insertWithOnConflict("files", null, ContentValues().apply {
                         put("path", file.path); put("uri", file.uri.toString()); put("modified", file.modified)
                         put("size", file.size); put("status", extracted.status); put("generation", generation)
+                        put("knowledge", metadata.json().toString()); put("priority", metadata.priority(file.path))
                     }, SQLiteDatabase.CONFLICT_REPLACE)
                     db.setTransactionSuccessful()
                 } finally { db.endTransaction() }
@@ -92,23 +102,39 @@ class VaultIndex(context: Context) : SQLiteOpenHelper(context, "vault-reference.
         fun candidates(all: Boolean): List<VaultHit> {
             val hits = mutableListOf<VaultHit>()
             readableDatabase.rawQuery(
-                "SELECT chunks.path,files.uri,chunks.body,chunks.start,files.status FROM chunks JOIN files ON files.path=chunks.path WHERE chunks MATCH ? LIMIT 400",
+                "SELECT chunks.path,files.uri,chunks.body,chunks.start,files.status,files.knowledge FROM chunks JOIN files ON files.path=chunks.path WHERE chunks MATCH ? ORDER BY files.priority DESC, chunks.path, CAST(chunks.start AS INTEGER) LIMIT 400",
                 arrayOf(VaultText.matchQuery(query, all)),
-            ).use { c -> while (c.moveToNext()) hits.add(VaultHit(c.getString(0), c.getString(1), c.getString(2), c.getInt(3), c.getString(4))) }
+            ).use { c -> while (c.moveToNext()) hits.add(VaultHit(c.getString(0), c.getString(1), c.getString(2), c.getInt(3), c.getString(4), KnowledgeMetadata.fromJson(c.getString(5)))) }
             return hits
         }
         val exact = candidates(true)
         val matches = if (exact.size >= max) exact else (exact + candidates(false)).distinctBy { it.path to it.offset }
-        matches.sortedByDescending { VaultText.score(it.path, it.excerpt, query) }.take(max)
+        matches.sortedByDescending { VaultText.score(it.path, it.excerpt, query) + it.knowledge.priority(it.path) }.take(max)
+    }
+
+    /** Optional short routing note, read only from the already selected/indexed vault. */
+    fun coreIndex(): VaultHit? = synchronized(LOCK) {
+        for (path in listOf("ODCM/00-Core/INDEX.md", "00-Core/INDEX.md")) {
+            readableDatabase.rawQuery(
+                "SELECT files.uri,chunks.body,files.status,files.knowledge FROM files JOIN chunks ON files.path=chunks.path WHERE files.path=? AND chunks.start='0' AND files.status='Text indexed'",
+                arrayOf(path),
+            ).use { c ->
+                if (c.moveToFirst()) return@synchronized VaultHit(path, c.getString(0), c.getString(1), 0,
+                    c.getString(2), KnowledgeMetadata.fromJson(c.getString(3)))
+            }
+        }
+        null
     }
 
     /** Paged reads from extracted text. No file path from a model is used to reach outside the index. */
     fun read(path: String, offset: Int = 0, limit: Int = 6000): String = synchronized(LOCK) {
         require(VaultText.validPath(path)) { "Invalid path" }
         require(offset >= 0) { "Offset must be positive" }
-        val status = readableDatabase.rawQuery("SELECT status FROM files WHERE path=?", arrayOf(path)).use {
-            require(it.moveToFirst()) { "File not found; search for its exact path first." }; it.getString(0)
+        val record = readableDatabase.rawQuery("SELECT status,knowledge FROM files WHERE path=?", arrayOf(path)).use {
+            require(it.moveToFirst()) { "File not found; search for its exact path first." }
+            it.getString(0) to KnowledgeMetadata.fromJson(it.getString(1))
         }
+        val status = record.first
         if (status != "Text indexed") return@synchronized status
         val length = limit.coerceIn(1, 12_000)
         val out = StringBuilder()
@@ -123,7 +149,8 @@ class VaultIndex(context: Context) : SQLiteOpenHelper(context, "vault-reference.
                 if (part.length > remaining || (out.length >= length && !c.isLast)) { hasMore = true; break }
             }
         }
-        "Source: $path\nOffset: $offset\n" + out + if (hasMore) "\n[More text: read_vault at offset ${offset + out.length}]" else "\n[End of file]"
+        "Source: $path\nOffset: $offset\nKnowledge metadata (reference data): ${record.second.json()}\n" +
+            out + if (hasMore) "\n[More text: read_vault at offset ${offset + out.length}]" else "\n[End of file]"
     }
 
     fun requireTree(tree: String) = synchronized(LOCK) {

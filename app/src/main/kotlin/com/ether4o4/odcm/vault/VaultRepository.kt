@@ -2,6 +2,7 @@ package com.ether4o4.odcm.vault
 
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import com.ether4o4.odcm.data.Settings
 import java.io.File
 import java.io.FilterInputStream
@@ -12,6 +13,7 @@ import java.util.zip.ZipInputStream
 class VaultRepository(private val context: Context) : java.io.Closeable {
     private val tree = Settings(context).vaultUri
     private val index = VaultIndex(context)
+    private var referenceRefreshedAt: Long? = null
     private val documents: VaultDocuments get() {
         require(tree.isNotBlank()) { "Choose your Obsidian vault in ODCM first." }
         require(Settings(context).vaultUri == tree) { "Vault selection changed; start again." }
@@ -20,7 +22,22 @@ class VaultRepository(private val context: Context) : java.io.Closeable {
     fun refresh(force: Boolean = false, progress: (Int, Int) -> Unit = { _, _ -> }): VaultStats {
         val docs = documents
         val files = docs.list()
-        return index.refresh(tree, files, force, progress, VaultExtractor(context, docs)::extract)
+        return index.refresh(tree, files, force, progress, VaultExtractor(context, docs)::extract).also {
+            referenceRefreshedAt = SystemClock.elapsedRealtime()
+        }
+    }
+    /** Follow-up searches reuse the index briefly; explicit UI refreshes are never throttled. */
+    fun refreshForReference() {
+        require(Settings(context).vaultUri == tree) { "Vault selection changed; start again." }
+        val last = referenceRefreshedAt
+        if (last == null || SystemClock.elapsedRealtime() - last >= 60_000) refresh()
+        else index.requireTree(tree)
+    }
+    fun referenceContext(query: String): String {
+        index.requireTree(tree)
+        val core = index.coreIndex()
+        val related = index.search(query, 4).filterNot { it.path == core?.path }.take(3)
+        return VaultReference.render(listOfNotNull(core) + related, VaultReference.CONTEXT_CHARS, 1000, 2600)
     }
     fun search(query: String, limit: Int = 8): List<VaultHit> { index.requireTree(tree); return index.search(query, limit) }
     fun read(path: String, offset: Int = 0): String { index.requireTree(tree); return index.read(path, offset) }

@@ -13,8 +13,8 @@ android {
         minSdk = 30
         targetSdk = 35
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 15
-        versionName = "0.3.6"
+        versionCode = 16
+        versionName = "0.3.7"
         manifestPlaceholders["appLabel"] = "ODCM"
     }
 
