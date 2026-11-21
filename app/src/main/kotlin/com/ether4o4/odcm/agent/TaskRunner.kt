@@ -45,7 +45,13 @@ class TaskRunner(
 
     suspend fun run(task: String) {
         val completed = withTimeoutOrNull(limits.remainingMillis()) { runLoop(task); true }
-        if (completed == null) callbacks.status("Stopped: task time limit reached")
+        if (completed == null) reportLimit("task time limit reached")
+    }
+
+    private fun reportLimit(reason: String) {
+        if (stopped) return
+        callbacks.reply("I stopped before finishing: $reason.")
+        callbacks.status("Stopped: $reason")
     }
 
     private suspend fun runLoop(task: String) {
@@ -64,7 +70,7 @@ class TaskRunner(
             catch (e: Exception) { callbacks.status("Vault unavailable: ${e.message}") }
         }
         while (!stopped) {
-            limits.exceeded()?.let { callbacks.status("Stopped: $it"); return }
+            limits.exceeded()?.let { reportLimit(it); return }
             awaitReady()
             if (stopped) break
             for (message in messages.drain()) model.addUserText("User follow-up: $message")

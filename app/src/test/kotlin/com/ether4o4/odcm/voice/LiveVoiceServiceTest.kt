@@ -105,6 +105,37 @@ class LiveVoiceServiceTest {
         } finally { controller.destroy() }
     }
 
+    @Test fun nextConversationTurnIgnoresRepliesAndCompletionFromThePreviousTurn() {
+        val controller = start()
+        try {
+            val first = ShadowSpeechRecognizer.getLatestSpeechRecognizer()
+            shadowOf(first).triggerOnResults(result("Hello")); main.idle()
+            val firstToken = shadowOf(controller.get()).nextStartedService.getStringExtra(AgentService.EXTRA_VOICE_TURN)!!
+            LiveVoiceService.reply(firstToken, "Hello back")
+            LiveVoiceService.taskEnded(firstToken)
+            main.idleFor(Duration.ofMillis(500))
+            assertFalse(LiveVoiceService.ownsTurn(firstToken))
+
+            val second = ShadowSpeechRecognizer.getLatestSpeechRecognizer()
+            assertNotSame(first, second)
+            shadowOf(second).triggerOnResults(result("Tell me more")); main.idle()
+            val secondToken = shadowOf(controller.get()).nextStartedService.getStringExtra(AgentService.EXTRA_VOICE_TURN)!!
+            assertNotEquals(firstToken, secondToken)
+            LiveVoiceService.reply(firstToken, "Late first reply")
+            LiveVoiceService.taskEnded(firstToken)
+            main.idleFor(Duration.ofSeconds(1))
+            assertEquals("Hello back", shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance()).lastSpokenText)
+            assertTrue(LiveVoiceService.ownsTurn(secondToken))
+            assertSame(second, ShadowSpeechRecognizer.getLatestSpeechRecognizer())
+
+            LiveVoiceService.reply(secondToken, "Here is more")
+            LiveVoiceService.taskEnded(secondToken)
+            main.idleFor(Duration.ofMillis(500))
+            assertEquals("Here is more", shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance()).lastSpokenText)
+            assertNotSame(second, ShadowSpeechRecognizer.getLatestSpeechRecognizer())
+        } finally { controller.destroy() }
+    }
+
     @Test fun emptySpeechRetriesAreBoundedAndNeverCallTheModel() {
         val controller = start()
         try {

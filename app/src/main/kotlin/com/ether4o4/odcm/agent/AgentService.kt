@@ -70,7 +70,7 @@ class AgentService : Service(), Overlay.Listener {
             return START_NOT_STICKY
         }
 
-        startForeground(NOTIF_ID, notification("ODCM is working"))
+        startForeground(NOTIF_ID, notification(if (RequestRoute.phone(task)) "ODCM is working" else "ODCM is responding"))
         if (intent.getBooleanExtra(EXTRA_LEARN, false)) { startLearning(); return START_NOT_STICKY }
         startTask(task, replyTarget = intent.getStringExtra(EXTRA_REPLY_KEY), speakReply = intent.getBooleanExtra(EXTRA_SPEAK_REPLY, false), liveTurn = intent.getStringExtra(EXTRA_VOICE_TURN))
         return START_NOT_STICKY
@@ -105,9 +105,9 @@ class AgentService : Service(), Overlay.Listener {
         speakResponses = speakReply && replyTarget == null
         val recent = Conversation.context(task)
         Conversation.user(task)
-        Conversation.begin()
-        TaskLog.add("Task: $task")
         val control = ControlService.get().takeIf { RequestRoute.phone(task) }
+        Conversation.begin(if (control != null) "Working" else "Thinking")
+        TaskLog.add("${if (control != null) "Task" else "Conversation"}: $task")
         val settings = Settings(this)
         val local = control?.let { RequestRoute.local(task, AppLauncher(this).catalog()) }
         val selectedModel = if (settings.economy && !RequestRoute.deep(task) && settings.provider == com.ether4o4.odcm.data.ModelProvider.GEMINI && settings.model == "gemini-4-hydrogen")
@@ -244,7 +244,7 @@ class AgentService : Service(), Overlay.Listener {
 
     /** Chat remains available without accessibility. This path has no device-action tools. */
     private suspend fun runChat(model: TaskModel, first: String, vault: VaultRepository?) {
-        Conversation.status("Lightweight chat")
+        Conversation.status("Thinking")
         val completed = withTimeoutOrNull(10 * 60_000L) {
             var next = listOf(first)
             var turns = 0
@@ -267,7 +267,7 @@ class AgentService : Service(), Overlay.Listener {
             }
             true
         }
-        if (completed == null) Conversation.notice("Chat stopped at its time limit.")
+        if (completed == null) deliverReply("I couldn't finish this reply within the time limit. Please try again.")
     }
 
     /** User-started observation session. Never opens apps, taps controls or calls a model. */

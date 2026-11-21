@@ -10,8 +10,17 @@ replace the APK at this same address after tests and lint pass. Download this
 single APK directly; there is no need to download or unpack the three-APK
 GitHub Actions artifact.
 
-Current published app version: **0.3.6 (build 15)**. This **0.3.7 (build 16)** branch adds the core
-knowledge foundation described below; use its CI artifact to review unreleased changes.
+Current published app version: **0.3.6 (build 15)**. This **0.3.8 (build 17)** branch adds
+the core knowledge foundation and conversation routing fixes described below.
+
+**[Latest preview builds](https://github.com/ether4o4/android-ui-access-/actions/workflows/build.yml?query=branch%3Acodex%2Fodcm-core-knowledge)** ·
+**[Review the changes before merging (PR #9)](https://github.com/ether4o4/android-ui-access-/pull/9)**
+
+Open the latest successful preview run and download its **ODCM-preview** artifact.
+Extract the ZIP and install `ODCM-preview.apk`; this contains only the preview APK,
+so you do not need the larger three-APK artifact. Older runs may only offer **ODCM-apks**.
+Preview is the existing ODCM code with these changes, installed separately for testing.
+
 The avatar fills the companion panel
 at every size. Tap **▾** for conversation and typing, **▴** to hide it, and **🎤**
 for a voice conversation. Drag **⠿** to move and **◢** to resize; position and size persist.
@@ -20,7 +29,9 @@ Tap the microphone once to start repeated voice turns, without a recording dialo
 covering the companion. Android requests microphone permission when needed.
 Recognition prefers the on-device engine; its fallback may use the network.
 Only the final transcript is submitted. After the task and spoken reply finish,
-listening resumes automatically. Recognition pauses during replies: spoken
+listening resumes automatically. Ordinary speech stays in conversation; a clear
+phone action request such as "Open Settings" enables phone tools. Mentioning an app
+or talking about a problem does not by itself request an action. Recognition pauses during replies: spoken
 interruption and simultaneous listening/playback are not implemented.
 
 Replies use bundled offline Kokoro Michael by default. An installed Android
@@ -63,9 +74,9 @@ See [the knowledge format and import guide](docs/core-knowledge.md) and
   requests use `gemini-2.5-flash-lite`; `/deep your request` explicitly uses
   Hydrogen and a larger output budget. Other custom model selections are kept.
   No cross-provider or paid fallback happens automatically.
-- Clear conversational prompts use a small tool-free request even when
-  accessibility is enabled. Ambiguous prompts keep phone tools. `/chat` forces
-  conversation; `/task` forces phone control; `/deep` increases effort/budget.
+- Conversation is the default even when accessibility is enabled. Clear phone
+  action or live-screen requests enable phone tools; uncertain prompts stay in chat.
+  `/chat` forces conversation; `/task` forces phone control; `/deep` increases effort/budget.
 - Exact Home, Back, Recents, Notifications, Quick Settings and unambiguous
   `Open <installed app>` requests use no model. They still run through the same
   policy, approval, fresh-screen checks and action verification as AI tasks.
