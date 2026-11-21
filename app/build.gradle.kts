@@ -13,8 +13,8 @@ android {
         minSdk = 30
         targetSdk = 35
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 15
-        versionName = "0.3.6"
+        versionCode = 17
+        versionName = "0.3.8"
         manifestPlaceholders["appLabel"] = "ODCM"
     }
 
@@ -69,7 +69,16 @@ android {
         abortOnError = true
         checkReleaseBuilds = true
     }
-    testOptions { unitTests.isIncludeAndroidResources = true }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        // Robolectric resolves its Android runtime separately from Gradle's repositories.
+        // Use Google's Maven Central mirror for the large SDK jars; keep checksum verification.
+        // https://docs.cloud.google.com/docs/buildpacks/java#google_cloud_hosted_maven_central_mirror
+        // https://robolectric.org/configuring/#system-properties
+        unitTests.all {
+            it.systemProperty("robolectric.dependency.repo.url", "https://maven-central.storage-download.googleapis.com/maven2")
+        }
+    }
 }
 
 dependencies {

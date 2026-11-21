@@ -1,6 +1,8 @@
-# ODCM 0.3.6 voice conversation
+# ODCM 0.3.8 preview voice conversation
 
 Tap the companion mic once. Android sends the final recognized sentence automatically, ODCM speaks the reply with the bundled Michael male voice (or the optional Android offline engine), and listening resumes after the task and playback finish. Tap the mic again to end the voice session. The square Stop button stops both the task and voice. Closing the companion or switching the screen off ends voice.
+
+Conversation is the default: "I had a rough day" or "Why is my phone slow?" should get a reply without phone actions. Clear requests such as "Open Settings" or "What is on my screen?" enable phone tools. Merely mentioning an app does not enable them. For typed requests, `/chat` forces conversation and `/task` explicitly requests phone control. Recent conversation stays available across voice turns.
 
 There is no recording dialog covering the avatar or chat dropdown. Android still shows its microphone permission prompt (first use), privacy indicator, and a voice notification with a Stop action. Recognition prefers the on-device engine; if unavailable, the installed Android recognizer may use a network connection. The default TTS engine and model are bundled inside the APK; no separate voice app or runtime download is required. The cloud model still needs internet.
 
@@ -9,8 +11,8 @@ The microphone is paused during replies. This is automatic turn-taking, not simu
 ## Phone acceptance check
 
 1. In ODCM leave **Built-in male voice · Michael (offline)** checked. Turn on airplane mode, make sure Wi-Fi is off, then tap **Test voice**. It should speak without an API request. Restore networking for the cloud agent. To use Next-gen Kaldi instead, uncheck built-in voice and select the engine in Android settings.
-2. In ODCM tap the mic, grant permission if needed, and say a short sentence. Stop talking. Verify one message is sent automatically and the reply is audible.
-3. After the reply, speak a second sentence without tapping anything. Verify it sends and replies again.
+2. In ODCM tap the mic, grant permission if needed, and say "I had a rough day." Stop talking. Verify one message is sent automatically, the reply is audible, and ODCM does not operate the phone.
+3. After the reply, say "Can we just talk about it?" without tapping anything. Verify it sends, replies audibly again, and retains the conversational context. Then try "Why is my phone slow?" and confirm this remains a discussion. Separately say "Open Settings" to check that explicit phone control still works with accessibility enabled.
 4. Open/close the chat dropdown during the conversation. Verify avatar, resizing and drag placement remain available.
 5. Tap the mic to stop, then speak. Verify no transcript is sent. Repeat with the square Stop button and screen-off.
 6. Test an error (missing provider key or unavailable voice) and verify there is a useful message rather than a silently stuck microphone.

@@ -105,6 +105,111 @@ class LiveVoiceServiceTest {
         } finally { controller.destroy() }
     }
 
+    @Test fun nextConversationTurnIgnoresRepliesAndCompletionFromThePreviousTurn() {
+        val controller = start()
+        try {
+            val first = ShadowSpeechRecognizer.getLatestSpeechRecognizer()
+            shadowOf(first).triggerOnResults(result("Hello")); main.idle()
+            val firstToken = shadowOf(controller.get()).nextStartedService.getStringExtra(AgentService.EXTRA_VOICE_TURN)!!
+            LiveVoiceService.reply(firstToken, "Hello back")
+            LiveVoiceService.taskEnded(firstToken)
+            main.idleFor(Duration.ofMillis(500))
+            assertFalse(LiveVoiceService.ownsTurn(firstToken))
+
+            val second = ShadowSpeechRecognizer.getLatestSpeechRecognizer()
+            assertNotSame(first, second)
+            shadowOf(second).triggerOnResults(result("Tell me more")); main.idle()
+            val secondToken = shadowOf(controller.get()).nextStartedService.getStringExtra(AgentService.EXTRA_VOICE_TURN)!!
+            assertNotEquals(firstToken, secondToken)
+            LiveVoiceService.reply(firstToken, "Late first reply")
+            LiveVoiceService.taskEnded(firstToken)
+            main.idleFor(Duration.ofSeconds(1))
+            assertEquals("Hello back", shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance()).lastSpokenText)
+            assertTrue(LiveVoiceService.ownsTurn(secondToken))
+            assertSame(second, ShadowSpeechRecognizer.getLatestSpeechRecognizer())
+
+            LiveVoiceService.reply(secondToken, "Here is more")
+            LiveVoiceService.taskEnded(secondToken)
+            main.idleFor(Duration.ofMillis(500))
+            assertEquals("Here is more", shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance()).lastSpokenText)
+            assertNotSame(second, ShadowSpeechRecognizer.getLatestSpeechRecognizer())
+        } finally { controller.destroy() }
+    }
+
+    @Test fun agentDeadlineExplanationCanSpeakBeforeTheWatchdogAndContinueConversation() {
+        val controller = start()
+        try {
+            val first = ShadowSpeechRecognizer.getLatestSpeechRecognizer()
+            shadowOf(first).triggerOnResults(result("Help me with this")); main.idle()
+            val firstToken = shadowOf(controller.get()).nextStartedService.getStringExtra(AgentService.EXTRA_VOICE_TURN)!!
+            main.idleFor(Duration.ofMinutes(10))
+            assertTrue(LiveVoiceService.isRunning)
+            assertTrue(LiveVoiceService.ownsTurn(firstToken))
+
+            val explanation = "I couldn't finish this reply within the time limit. Please try again."
+            LiveVoiceService.reply(firstToken, explanation)
+            LiveVoiceService.taskEnded(firstToken)
+            main.idleFor(Duration.ofMillis(500))
+            assertEquals(explanation, shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance()).lastSpokenText)
+            val second = ShadowSpeechRecognizer.getLatestSpeechRecognizer()
+            assertNotSame(first, second)
+            assertFalse(shadowOf(second).isDestroyed)
+
+            shadowOf(second).triggerOnResults(result("Let's just talk")); main.idle()
+            val secondToken = shadowOf(controller.get()).nextStartedService.getStringExtra(AgentService.EXTRA_VOICE_TURN)!!
+            // Pass the first turn's watchdog deadline while the second turn is pending.
+            main.idleFor(Duration.ofMinutes(1))
+            assertTrue(LiveVoiceService.ownsTurn(secondToken))
+            LiveVoiceService.reply(secondToken, "Of course. What's on your mind?")
+            LiveVoiceService.taskEnded(secondToken)
+            main.idleFor(Duration.ofMillis(500))
+            assertEquals("Of course. What's on your mind?", shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance()).lastSpokenText)
+            assertNotSame(second, ShadowSpeechRecognizer.getLatestSpeechRecognizer())
+        } finally { controller.destroy() }
+    }
+
+    @Test fun missingAgentCompletionEndsAtElevenMinutesAndRejectsLateReplies() {
+        val controller = start()
+        try {
+            val first = ShadowSpeechRecognizer.getLatestSpeechRecognizer()
+            shadowOf(first).triggerOnResults(result("Hello")); main.idle()
+            val token = shadowOf(controller.get()).nextStartedService.getStringExtra(AgentService.EXTRA_VOICE_TURN)!!
+            main.idleFor(Duration.ofMinutes(10).plusSeconds(59))
+            assertTrue(LiveVoiceService.isRunning)
+            assertTrue(LiveVoiceService.ownsTurn(token))
+            main.idleFor(Duration.ofSeconds(1))
+            assertFalse(LiveVoiceService.isRunning)
+            assertFalse(LiveVoiceService.ownsTurn(token))
+            assertTrue(shadowOf(first).isDestroyed)
+            assertTrue(shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance()).isShutdown)
+
+            LiveVoiceService.reply(token, "Late reply must not speak")
+            LiveVoiceService.taskEnded(token)
+            main.idleFor(Duration.ofSeconds(1))
+            assertSame(first, ShadowSpeechRecognizer.getLatestSpeechRecognizer())
+            assertNull(shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance()).lastSpokenText)
+            assertNull(shadowOf(controller.get()).nextStartedService)
+        } finally { controller.destroy() }
+    }
+
+    @Test fun intermediateReplyDoesNotExtendTheAgentCompletionWatchdog() {
+        val controller = start()
+        try {
+            val first = ShadowSpeechRecognizer.getLatestSpeechRecognizer()
+            shadowOf(first).triggerOnResults(result("Check this")); main.idle()
+            val token = shadowOf(controller.get()).nextStartedService.getStringExtra(AgentService.EXTRA_VOICE_TURN)!!
+            main.idleFor(Duration.ofMinutes(10))
+            LiveVoiceService.reply(token, "Still checking")
+            main.idle()
+            assertEquals("Still checking", shadowOf(ShadowTextToSpeech.getLastTextToSpeechInstance()).lastSpokenText)
+            assertTrue(LiveVoiceService.ownsTurn(token))
+            main.idleFor(Duration.ofMinutes(1))
+            assertFalse(LiveVoiceService.isRunning)
+            assertFalse(LiveVoiceService.ownsTurn(token))
+            assertSame(first, ShadowSpeechRecognizer.getLatestSpeechRecognizer())
+        } finally { controller.destroy() }
+    }
+
     @Test fun emptySpeechRetriesAreBoundedAndNeverCallTheModel() {
         val controller = start()
         try {

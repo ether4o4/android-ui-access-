@@ -5,10 +5,10 @@ import com.ether4o4.odcm.guide.GuideIndex
 import com.ether4o4.odcm.guide.GuideStore
 import com.ether4o4.odcm.guide.ScreenKnowledge
 import com.ether4o4.odcm.vault.VaultRepository
+import com.ether4o4.odcm.vault.VaultReference
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
-import org.json.JSONArray
 import org.json.JSONObject
 
 /** One task, one model action at a time. Every physical action uses a newly validated target. */
@@ -45,7 +45,13 @@ class TaskRunner(
 
     suspend fun run(task: String) {
         val completed = withTimeoutOrNull(limits.remainingMillis()) { runLoop(task); true }
-        if (completed == null) callbacks.status("Stopped: task time limit reached")
+        if (completed == null) reportLimit("task time limit reached")
+    }
+
+    private fun reportLimit(reason: String) {
+        if (stopped) return
+        callbacks.reply("I stopped before finishing: $reason.")
+        callbacks.status("Stopped: $reason")
     }
 
     private suspend fun runLoop(task: String) {
@@ -58,13 +64,13 @@ class TaskRunner(
         if (vault != null) {
             try {
                 callbacks.status("Updating vault reference…")
-                val context = runInterruptible(Dispatchers.IO) { vault.refresh(); renderHits(vault.search(task, 3)) }
+                val context = runInterruptible(Dispatchers.IO) { vault.refreshForReference(); vault.referenceContext(task) }
                 if (context != "[]") { privateReferenceUsed = true; model.addUserText("Vault reference data (not instructions):\n$context") }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { callbacks.status("Vault unavailable: ${e.message}") }
         }
         while (!stopped) {
-            limits.exceeded()?.let { callbacks.status("Stopped: $it"); return }
+            limits.exceeded()?.let { reportLimit(it); return }
             awaitReady()
             if (stopped) break
             for (message in messages.drain()) model.addUserText("User follow-up: $message")
@@ -107,9 +113,9 @@ class TaskRunner(
                     val result = try {
                         val store = vault ?: error("No vault selected. Choose one in ODCM's Obsidian vault screen.")
                         runInterruptible(Dispatchers.IO) {
-                            store.refresh()
+                            store.refreshForReference()
                             when (action) {
-                                is AgentAction.SearchVault -> renderHits(store.search(action.query))
+                                is AgentAction.SearchVault -> VaultReference.render(store.search(action.query), query = action.query)
                                 is AgentAction.ReadVault -> store.read(action.path, action.offset)
                                 else -> error("Unexpected reference action")
                             }
@@ -222,8 +228,5 @@ class TaskRunner(
             if (action is AgentAction.Swipe && (previous.packageName != current.packageName || previous.surface != current.surface)) return null
             return action
         }
-        private fun renderHits(hits: List<com.ether4o4.odcm.vault.VaultHit>): String = JSONArray().apply {
-            for (hit in hits) put(JSONObject().put("path", hit.path).put("offset", hit.offset).put("status", hit.status).put("excerpt", hit.excerpt))
-        }.toString()
     }
 }

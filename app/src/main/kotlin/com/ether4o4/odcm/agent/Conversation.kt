@@ -44,7 +44,7 @@ object Conversation {
         mutable.value = mutable.value.copy(partial = "")
     }
     @Synchronized fun notice(text: String) { append(ChatMessage("notice", text.take(2000))) }
-    @Synchronized fun begin() { mutable.value = mutable.value.copy(busy = true, paused = false, partial = "", status = "Working") }
+    @Synchronized fun begin(status: String = "Working") { mutable.value = mutable.value.copy(busy = true, paused = false, partial = "", status = status) }
     @Synchronized fun beginResponse() { mutable.value = mutable.value.copy(partial = "") }
     @Synchronized fun delta(text: String) {
         if (mutable.value.busy) mutable.value = mutable.value.copy(partial = (mutable.value.partial + text).take(20000))

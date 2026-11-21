@@ -54,9 +54,10 @@ class TaskRunnerTest {
 
     private class Callbacks : TaskRunner.Callbacks {
         val statuses = mutableListOf<String>()
+        val replies = mutableListOf<String>()
         var approve: suspend () -> Boolean = { true }
         override fun status(text: String) { statuses += text }
-        override fun reply(text: String) {}
+        override fun reply(text: String) { replies += text }
         override suspend fun requestApproval(reason: String) = approve()
         override fun settleDelayMs() = 0L
     }
@@ -138,14 +139,16 @@ class TaskRunnerTest {
     @Test fun stopDuringModelResponsePreventsLateAction() = runBlocking {
         val device = Device(screen())
         val model = Model("tap" to mapOf("index" to 0))
+        val callbacks = Callbacks()
         val response = CompletableDeferred<Unit>()
         model.beforeDecision = { response.await() }
-        val task = runner(device, model)
+        val task = runner(device, model, callbacks)
         val job = launch(start = CoroutineStart.UNDISPATCHED) { task.run("Continue") }
         task.stop()
         response.complete(Unit)
         job.join()
         assertTrue(device.actions.isEmpty())
+        assertTrue(callbacks.replies.isEmpty())
     }
 
     @Test fun acceptedTapWithoutObservedEffectDoesNotTeach() = runBlocking {
@@ -213,6 +216,40 @@ class TaskRunnerTest {
             limits = StepLimits(maxMillis = 100)).run("Send")
         assertTrue(device.actions.isEmpty())
         assertTrue(callbacks.statuses.last().contains("time limit"))
+        assertEquals(1, callbacks.replies.size)
+        assertTrue(callbacks.replies.single().contains("time limit"))
+    }
+
+    @Test fun stepLimitDeliversAnExplanationWithoutExecutingAnotherAction() = runBlocking {
+        val device = Device(screen())
+        val model = Model("read_screen" to emptyMap(), "tap" to mapOf("index" to 0))
+        val callbacks = Callbacks()
+        runner(device, model, callbacks, limits = StepLimits(maxSteps = 1)).run("Continue")
+        assertTrue(device.actions.isEmpty())
+        assertEquals(1, model.pending.size)
+        assertEquals(1, callbacks.replies.size)
+        assertTrue(callbacks.replies.single().contains("1-step limit"))
+        assertTrue(callbacks.statuses.last().startsWith("Stopped:"))
+    }
+
+    @Test fun expiredDeadlineDeliversAnExplanationBeforeAnyModelCall() = runBlocking {
+        val device = Device(screen())
+        val model = Model("tap" to mapOf("index" to 0))
+        val callbacks = Callbacks()
+        runner(device, model, callbacks, limits = StepLimits(maxMillis = 0)).run("Continue")
+        assertTrue(model.inputs.isEmpty())
+        assertTrue(device.actions.isEmpty())
+        assertEquals(1, callbacks.replies.size)
+        assertTrue(callbacks.replies.single().contains("time limit"))
+    }
+
+    @Test fun stoppedTaskDoesNotSpeakAnExpiredDeadline() = runBlocking {
+        val callbacks = Callbacks()
+        val task = runner(Device(screen()), Model(), callbacks, limits = StepLimits(maxMillis = 0))
+        task.stop()
+        task.run("Continue")
+        assertTrue(callbacks.replies.isEmpty())
+        assertTrue(callbacks.statuses.isEmpty())
     }
 
     @Test fun repeatedInvalidActionsHitFailureLimit() = runBlocking {
@@ -223,5 +260,7 @@ class TaskRunnerTest {
         assertEquals(3, model.results.size)
         assertTrue(callbacks.statuses.last().contains("3 actions"))
         assertTrue(device.actions.isEmpty())
+        assertEquals(1, callbacks.replies.size)
+        assertTrue(callbacks.replies.single().contains("3 actions in a row failed"))
     }
 }
