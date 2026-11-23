@@ -55,4 +55,69 @@ class VaultIndexTest {
         assertTrue(db.read("Notes.md", 3900).contains("final detail"))
         assertTrue(db.search("\" OR ***").isEmpty())
     }
+
+    @Test fun curatedKnowledgeIsNotCrowdedOutByFourHundredRawArchiveMatches() {
+        val raw = (1..410).map { file("ODCM/90-Sources/$it.md") }
+        val curated = file("ODCM/40-Workflows/Termux.md")
+        db.refresh("tree", raw + curated) {
+            val header = if (it.path == curated.path) "---\nodcm_schema: 1\nkind: workflow\nstatus: confirmed\nsource: conversation-1#message-2\n---\n" else ""
+            ExtractedText(header + "Termux project execution", "Text indexed")
+        }
+        assertEquals(curated.path, db.search("Termux project").first().path)
+        assertTrue(db.search("Termux", 30).any { it.path.startsWith("ODCM/90-Sources/") })
+    }
+
+    @Test fun laterChunksAndReadsRetainEvidenceStatusAndCoreIndexSupportsEitherVaultRoot() {
+        val core = file("00-Core/INDEX.md")
+        val workflow = file("40-Workflows/Build.md")
+        db.refresh("tree", listOf(core, workflow)) {
+            val text = if (it.path == core.path) "Core routing" else
+                "---\nodcm_schema: 1\nkind: workflow\nstatus: failed\nsource: thread-7#message-4\nupdated: 2026-11-20\n---\n" + "Earlier details. ".repeat(300) + " terminal_quartz_failure"
+            ExtractedText(text, "Text indexed")
+        }
+        val hit = db.search("terminal_quartz_failure").single()
+        assertTrue(hit.offset > 0)
+        assertEquals("failed", hit.knowledge.status)
+        assertEquals("thread-7#message-4", hit.knowledge.source)
+        assertTrue(db.read(workflow.path, hit.offset).contains("\"status\":\"failed\""))
+        assertEquals(core.path, db.coreIndex()?.path)
+    }
+
+    @Test fun upgradingOldCachePreservesItsTreeAndBackfillsMetadataOnRefresh() {
+        val context = RuntimeEnvironment.getApplication()
+        db.close()
+        context.deleteDatabase("vault-reference.db")
+        context.openOrCreateDatabase("vault-reference.db", 0, null).use { old ->
+            old.execSQL("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            old.execSQL("CREATE TABLE files (path TEXT PRIMARY KEY, uri TEXT, modified INTEGER, size INTEGER, status TEXT, generation INTEGER)")
+            old.execSQL("CREATE VIRTUAL TABLE chunks USING fts4(path, body, start, tokenize=unicode61)")
+            old.execSQL("INSERT INTO meta VALUES('tree','selected-vault')")
+            old.execSQL("INSERT INTO files VALUES('Workflow.md','content://vault/Workflow.md',7,100,'Text indexed',1)")
+            old.execSQL("INSERT INTO chunks VALUES('Workflow.md','old indexed content','0')")
+            old.version = 1
+        }
+        db = VaultIndex(context)
+        db.requireTree("selected-vault")
+        assertTrue(db.read("Workflow.md").contains("old indexed content"))
+        var reads = 0
+        db.refresh("selected-vault", listOf(file("Workflow.md", 7))) {
+            reads++
+            ExtractedText("---\nodcm_schema: 1\nkind: workflow\nstatus: confirmed\n---\nCurrent workflow", "Text indexed")
+        }
+        assertEquals(1, reads)
+        assertEquals("confirmed", db.search("Current workflow").single().knowledge.status)
+    }
+
+    @Test fun initialContextCanSelectDifferentFilesInsteadOfManyChunksFromOneConversation() {
+        val long = file("ODCM/90-Sources/A.md")
+        val second = file("ODCM/90-Sources/B.md")
+        val third = file("ODCM/90-Sources/C.md")
+        db.refresh("tree", listOf(long, second, third)) {
+            val text = if (it.path == long.path) "Termux project notes. ".repeat(2000) else "Termux project detail"
+            ExtractedText(text, "Text indexed")
+        }
+        val hits = db.search("Termux project", 3, distinctFiles = true)
+        assertEquals(listOf(long.path, second.path, third.path), hits.map { it.path })
+        assertEquals(1, hits.count { it.path == long.path })
+    }
 }

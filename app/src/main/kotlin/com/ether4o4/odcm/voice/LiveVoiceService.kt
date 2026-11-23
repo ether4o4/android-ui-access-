@@ -83,7 +83,7 @@ class LiveVoiceService : Service() {
                     awaitingTask = true
                     val token = UUID.randomUUID().toString(); turn = token
                     update("Waiting for reply")
-                    handler.postDelayed(taskTimeout, 10 * 60_000)
+                    handler.postDelayed(taskTimeout, TASK_WATCHDOG_MS)
                     runCatching { AgentService.start(this@LiveVoiceService, text, speakReply = true, voiceTurn = token) }
                         .onFailure { end("Could not send your message. Tap the mic to try again.") }
                 }
@@ -181,6 +181,9 @@ class LiveVoiceService : Service() {
         const val ACTION_STOP = "com.ether4o4.odcm.STOP_VOICE"
         private const val CHANNEL = "odcm_live_voice"
         private const val NOTIFICATION = 44
+        // AgentService allows ten minutes. Its timeout explanation must reach the still-owned
+        // voice turn before this independent watchdog ends an unresponsive service handoff.
+        private const val TASK_WATCHDOG_MS = 11 * 60_000L
         private var instance: LiveVoiceService? = null
         val isRunning: Boolean get() = instance?.active == true
         fun ownsTurn(token: String): Boolean = instance?.let { it.active && it.turn == token } == true
